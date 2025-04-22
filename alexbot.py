@@ -1,4 +1,3 @@
-import os
 import time
 import logging
 import json
@@ -8,14 +7,15 @@ from binance.client import Client
 from binance import ThreadedWebsocketManager
 
 from config import (
-    DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD,
-    TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, MIRROR_B_TG_CHAT_ID,
     BINANCE_API_KEY, BINANCE_API_SECRET,
     MIRROR_ENABLED, MIRROR_B_API_KEY, MIRROR_B_API_SECRET,
     MIRROR_COEFFICIENT
 )
-from db import pg_conn, pg_raw, pg_upsert_position
-from telegram_bot import tg_send, tg_a, tg_m
+from db import (
+    pg_conn, pg_raw, pg_upsert_position,
+    wipe_mirror, reset_pending
+)
+from telegram_bot import tg_a, tg_m
 
 log = logging.getLogger(__name__)
 
@@ -32,6 +32,9 @@ def child_color() -> str:
 
 class AlexBot:
     def __init__(self):
+        # NEW: логируем запуск конструктора
+        log.debug("AlexBot.__init__ called")
+
         self.client_a = Client(BINANCE_API_KEY, BINANCE_API_SECRET)
         self.client_b = (
             Client(MIRROR_B_API_KEY, MIRROR_B_API_SECRET)
@@ -47,48 +50,34 @@ class AlexBot:
         self.ws.start_futures_user_socket(callback=self._ws_handler)
 
         # Инициализация
-        self._wipe_mirror()
-        self._reset_pending()
+        wipe_mirror()
+        reset_pending()
         self._sync_start()
         self._hello()
 
-    def _wipe_mirror(self):
-        """
-        Очищаем mirror_positions при старте.
-        """
-        try:
-            with pg_conn() as conn, conn.cursor() as cur:
-                cur.execute("TRUNCATE public.mirror_positions;")
-        except Exception as e:
-            log.error("_wipe_mirror: %s", e)
-
-    def _reset_pending(self):
-        """
-        Сбрасываем флаг pending у всех записей main-positions.
-        """
-        try:
-            with pg_conn() as conn, conn.cursor() as cur:
-                cur.execute("UPDATE public.positions SET pending=false WHERE exchange='binance';")
-        except Exception as e:
-            log.error("_reset_pending: %s", e)
-
     def _sync_start(self):
+        # NEW: логируем вход
+        log.debug("_sync_start: begin")
         """
         1) Выводим реально открытые позиции (и SL/TP).
         2) Помечаем как pending все NEW LIMIT-ордера.
         """
         # 1) открытые позиции
         try:
-            for p in self.client_a.futures_position_information():
+            positions = self.client_a.futures_position_information()
+            log.debug("_sync_start: got %d positions from binance", len(positions))
+            for p in positions:
                 amt = abs(float(p["positionAmt"]))
                 if amt < 1e-12:
                     continue
                 sym   = p["symbol"]
                 side  = "LONG" if float(p["positionAmt"])>0 else "SHORT"
                 price = float(p["entryPrice"])
-                # SL/TP
+
+                # Найдём SL/TP
+                open_orders = self.client_a.futures_get_open_orders(symbol=sym)
                 sl = tp = None
-                for od in self.client_a.futures_get_open_orders(symbol=sym):
+                for od in open_orders:
                     if od["type"] in CHILD_TYPES and od["status"]=="NEW":
                         trg = float(od.get("stopPrice") or od.get("price") or 0)
                         if trg:
@@ -96,21 +85,26 @@ class AlexBot:
                                 sl = trg
                             else:
                                 tp = trg
-                # Telegram
-                txt = f"{pos_color(side)} (start) Trader: {sym} Открыта {side} Объём: {amt}, Цена: {price}"
+
+                txt = (f"{pos_color(side)} (start) Trader: {sym} "
+                       f"Открыта {side} Объём: {amt}, Цена: {price}")
                 if sl is not None:
                     txt += f", SL={sl}"
                 if tp is not None:
                     txt += f", TP={tp}"
                 tg_a(txt)
-                # В БД
-                pg_upsert_position("positions", sym, side, amt, price, 0.0, "binance", False)
+
+                pg_upsert_position(
+                    "positions", sym, side, amt, price,
+                    0.0, "binance", False
+                )
         except Exception as e:
             log.error("_sync_start positions: %s", e)
 
         # 2) pending LIMIT-ордера
         try:
             orders = self.client_a.futures_get_open_orders()
+            log.debug("_sync_start: got %d open_orders", len(orders))
             for od in orders:
                 if od["type"]=="LIMIT" and od["status"]=="NEW":
                     sym   = od["symbol"]
@@ -119,15 +113,17 @@ class AlexBot:
                     side  = "LONG" if od["side"]=="BUY" else "SHORT"
                     sl = tp = None
                     for ch in orders:
-                        if (ch["symbol"]==sym and ch["status"]=="NEW"
-                                and ch["orderId"]!=od["orderId"]):
-                            if ch["type"] in CHILD_TYPES:
-                                trg = float(ch.get("stopPrice") or ch.get("price") or 0)
-                                if trg:
-                                    if "STOP" in ch["type"]:
-                                        sl = trg
-                                    else:
-                                        tp = trg
+                        if (
+                            ch["symbol"]==sym and ch["status"]=="NEW"
+                            and ch["orderId"]!=od["orderId"]
+                            and ch["type"] in CHILD_TYPES
+                        ):
+                            trg = float(ch.get("stopPrice") or ch.get("price") or 0)
+                            if trg:
+                                if "STOP" in ch["type"]:
+                                    sl = trg
+                                else:
+                                    tp = trg
                     txt = (f"🔵 (start) Trader: {sym} Новый LIMIT "
                            f"{pos_color(side)} {side}. Объём: {qty} по цене {price}.")
                     if sl is not None:
@@ -135,22 +131,30 @@ class AlexBot:
                     if tp is not None:
                         txt += f" TP={tp}"
                     tg_a(txt)
-                    pg_upsert_position("positions", sym, side, qty, price, 0.0, "binance", True)
+                    pg_upsert_position(
+                        "positions", sym, side, qty, price,
+                        0.0, "binance", True
+                    )
         except Exception as e:
             log.error("_sync_start limits: %s", e)
 
+        # NEW: логируем выход
+        log.debug("_sync_start: end")
+
     def _hello(self):
-        """
-        Приветствие и вывод балансов
-        """
+        # NEW
+        log.debug("_hello: begin")
         bal_a = self._usdt(self.client_a)
         msg   = f"▶️  Бот запущен.\nОсновной аккаунт: {bal_a:.2f} USDT"
         if self.client_b:
             bal_b = self._usdt(self.client_b)
             msg  += f"\nЗеркальный аккаунт активен: {bal_b:.2f} USDT"
         tg_m(msg)
+        log.debug("_hello: end")
 
     def _ws_handler(self, msg: Dict[str,Any]):
+        # NEW
+        log.debug("_ws_handler called with msg=%s", msg)
         """
         Callback на каждое WS-сообщение:
         - Сохраняем сырое msg в БД (pg_raw)
@@ -159,19 +163,15 @@ class AlexBot:
         """
         pg_raw(msg)
         log.info("[WS] %s", msg)
+
         if msg.get("e")=="ORDER_TRADE_UPDATE":
             o = msg["o"]
             self._on_order(o)
             self._diff_positions()
 
     def _on_order(self, o: Dict[str,Any]):
-        """
-        Логика ORDER_TRADE_UPDATE:
-         - NEW LIMIT
-         - CANCELED LIMIT
-         - NEW child STOP/TAKE
-         - FILLED MARKET/LIMIT (reduceOnly -> закрытие)
-        """
+        # NEW
+        log.debug("_on_order called with o=%s", o)
         sym, otype, status = o["s"], o["ot"], o["X"]
         side  = "LONG" if o["S"]=="BUY" else "SHORT"
 
@@ -215,17 +215,17 @@ class AlexBot:
             fill_qty    = float(o.get("l", 0))
 
             if reduce_flag:
-                # Закрытие (или частичное закрытие)
                 txt = (f"{pos_color(side)} Trader: {sym} (reduce-only) "
                        f"Закрыто {fill_qty} по цене {fill_price}")
                 tg_a(txt)
-                # Можно тут делать upsert-уменьшение, но проще _diff_positions()
             else:
-                # Открытие / увеличение
                 txt = (f"{pos_color(side)} Trader: {sym} Открыта/увеличена {side} "
                        f"на {fill_qty} по цене {fill_price}")
                 tg_a(txt)
-                pg_upsert_position("positions", sym, side, fill_qty, fill_price, 0.0, "binance", False)
+                pg_upsert_position(
+                    "positions", sym, side, fill_qty, fill_price,
+                    0.0, "binance", False
+                )
 
                 # Зеркало
                 if MIRROR_ENABLED and self.client_b:
@@ -236,24 +236,29 @@ class AlexBot:
                         type="MARKET",
                         quantity=m_qty
                     )
-                    pg_upsert_position("mirror_positions", sym, side, m_qty, fill_price, 0.0, "mirror", False)
-                    tg_m(f"[Mirror]: {pos_color(side)} Trader: {sym} Открыта {side} "
-                         f"(by MARKET). Объём: {m_qty}, Цена: {fill_price}")
+                    pg_upsert_position(
+                        "mirror_positions", sym, side,
+                        m_qty, fill_price, 0.0,
+                        "mirror", False
+                    )
+                    tg_m(f"[Mirror]: {pos_color(side)} Trader: {sym} "
+                         f"Открыта {side} (by MARKET). Объём: {m_qty}, Цена: {fill_price}")
 
     def _diff_positions(self):
+        # NEW
+        log.debug("_diff_positions called")
         """
-        Сравнение фактических позиций на Binance и в БД — на будущее.
+        Сравнение фактических позиций на Binance и в БД — пока заглушка
         """
         pass
 
     def _find_sl_tp(self, symbol:str):
-        """
-        Вспомогательный метод поиска SL/TP.
-        """
+        # NEW
+        log.debug("_find_sl_tp: symbol=%s", symbol)
         sl = tp = None
         try:
-            orders = self.client_a.futures_get_open_orders(symbol=symbol)
-            for od in orders:
+            open_orders = self.client_a.futures_get_open_orders(symbol=symbol)
+            for od in open_orders:
                 if od["type"] in CHILD_TYPES and od["status"]=="NEW":
                     trg = float(od.get("stopPrice") or od.get("price") or 0)
                     if trg:
@@ -267,20 +272,22 @@ class AlexBot:
 
     @staticmethod
     def _usdt(client: Client) -> float:
-        """
-        Узнать баланс USDT
-        """
+        # NEW
+        log.debug("_usdt called")
         try:
-            for b in client.futures_account_balance():
-                if b["asset"]=="USDT":
+            balances = client.futures_account_balance()
+            for b in balances:
+                if b["asset"] == "USDT":
                     return float(b["balance"])
         except Exception as e:
             log.error("_usdt: %s", e)
         return 0.0
 
     def run(self):
+        # NEW
+        log.debug("AlexBot.run called")
         try:
-            log.info("[Main] bot running … Ctrl+C to stop")
+            log.info("[Main] bot running ... Ctrl+C to stop")
             while True:
                 time.sleep(1)
         except KeyboardInterrupt:

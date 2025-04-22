@@ -7,11 +7,9 @@ from config import DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
 log = logging.getLogger(__name__)
 
 def pg_conn():
-    """
-    Создаёт новое соединение к PostgreSQL на основе данных из config.py.
-    """
     if not all([DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD]):
-        raise RuntimeError("Не заданы все переменные окружения для PostgreSQL")
+        raise RuntimeError("Postgres env-vars incomplete")
+
     dsn = (
         f"host={DB_HOST} port={DB_PORT} dbname={DB_NAME} "
         f"user={DB_USER} password={DB_PASSWORD} sslmode=require"
@@ -20,20 +18,27 @@ def pg_conn():
 
 def pg_raw(msg: Dict[str, Any]):
     """
-    Сохраняем ВСЁ WS‑сообщение в таблицу futures_events.
+    Сохраняем ВСЁ WS‑сообщение в futures_events.
     """
+    # NEW: логируем вызов
+    log.debug("pg_raw called with msg=%s", msg)
     try:
         with pg_conn() as conn, conn.cursor() as cur:
-            cur.execute("""
+            query = """
                 INSERT INTO public.futures_events
                        (exchange, event_type, symbol, raw_data)
                 VALUES (%s, %s, %s, %s)
-            """, (
-                "binance",
-                msg.get("e"),                    # event_type
-                msg.get("o", {}).get("s"),       # symbol
-                json.dumps(msg)                  # raw_data
-            ))
+            """
+            log.debug("Executing SQL: %s", query)
+            cur.execute(
+                query,
+                (
+                    "binance",
+                    msg.get("e"),
+                    msg.get("o", {}).get("s"),
+                    json.dumps(msg)
+                )
+            )
     except Exception as e:
         log.error("pg_raw: %s", e)
 
@@ -49,11 +54,13 @@ def pg_upsert_position(
 ):
     """
     UPSERT в таблицы positions / mirror_positions по ключу (symbol, position_side).
-    Флаг pending = True для ещё не исполненных LIMIT‑ордеров.
     """
+    # NEW: логируем вызов
+    log.debug("pg_upsert_position(%s, %s, %s, amt=%.6f, price=%.6f, pnl=%.6f, exchange=%s, pending=%s)",
+              table, symbol, side, amt, price, pnl, exchange, pending)
     try:
         with pg_conn() as conn, conn.cursor() as cur:
-            cur.execute(f"""
+            query = f"""
               INSERT INTO public.{table}
                      (exchange, symbol, position_side,
                       position_amt, entry_price, realized_pnl, pending)
@@ -65,27 +72,37 @@ def pg_upsert_position(
                  entry_price   = EXCLUDED.entry_price,
                  realized_pnl  = EXCLUDED.realized_pnl,
                  pending       = EXCLUDED.pending,
-                 updated_at    = now();
-            """, (exchange, symbol, side, amt, price, pnl, pending))
+                 updated_at    = now()
+            """
+            log.debug("Executing SQL: %s", query)
+            cur.execute(query, (exchange, symbol, side, amt, price, pnl, pending))
     except Exception as e:
         log.error("pg_upsert_position[%s]: %s", table, e)
 
 def wipe_mirror():
     """
-    Очищаем таблицу mirror_positions при старте (truncate).
+    Очищаем таблицу mirror_positions.
     """
+    # NEW: логируем вызов
+    log.debug("wipe_mirror called")
     try:
         with pg_conn() as conn, conn.cursor() as cur:
-            cur.execute("TRUNCATE public.mirror_positions;")
+            q = "TRUNCATE public.mirror_positions;"
+            log.debug("Executing SQL: %s", q)
+            cur.execute(q)
     except Exception as e:
         log.error("wipe_mirror: %s", e)
 
 def reset_pending():
     """
-    Сбрасываем флаг pending в таблице positions для старых записей.
+    Сбрасываем флаг pending в таблице positions (exchange=binance).
     """
+    # NEW: логируем вызов
+    log.debug("reset_pending called")
     try:
         with pg_conn() as conn, conn.cursor() as cur:
-            cur.execute("UPDATE public.positions SET pending=false WHERE exchange='binance';")
+            q = "UPDATE public.positions SET pending=false WHERE exchange='binance';"
+            log.debug("Executing SQL: %s", q)
+            cur.execute(q)
     except Exception as e:
         log.error("reset_pending: %s", e)

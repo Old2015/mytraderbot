@@ -1,35 +1,28 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-alexbot  |  2025-04-25
-──────────────────────────────────────────────────────────────
-• Отслеживает фьючерс‑аккаунт Binance (Account A)
-• Зеркалирует сделки на Account B (если MIRROR_ENABLED=true)
-• Пишет ВСЁ «сырое» WS‑сообщение в futures_events
-• Хранит позиции / mirror‑позиции в БД
-• При старте:
-    – очищает mirror_positions
-    – сбрасывает флаг pending в positions
-    – показывает открытые позиции + SL/TP
-    – показывает все NEW LIMIT‑ордера как pending
-• Дальше — обычная реакция на ORDER_TRADE_UPDATE
-"""
 
 import logging
 from alexbot import AlexBot
 
 def main():
-    # Настраиваем логирование «глобально», чтобы все log.info() попадали
-    # и в консоль, и в файл traderbot.log
+    # NEW: Настройка "глобального" логгирования на DEBUG,
+    #      пишем и в файл traderbot.log, и в консоль
     logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)-8s %(message)s",
+        level=logging.DEBUG,  # CHANGED: DEBUG вместо INFO
+        format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
         datefmt="%d-%m-%y %H:%M:%S",
         handlers=[
             logging.FileHandler("traderbot.log", mode="a", encoding="utf-8"),
             logging.StreamHandler()
         ]
     )
+
+    # NEW: Включаем DEBUG-логгирование для python-binance (очень подробные логи)
+    logging.getLogger("binance").setLevel(logging.DEBUG)
+
+    # OPTIONAL: Включить логи запросов HTTP (urllib3). Может быть очень шумно.
+    # import urllib3
+    # logging.getLogger("urllib3").setLevel(logging.DEBUG)
 
     bot = AlexBot()
     bot.run()
