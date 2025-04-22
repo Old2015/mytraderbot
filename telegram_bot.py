@@ -1,0 +1,31 @@
+import logging
+import requests
+from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, MIRROR_B_TG_CHAT_ID
+
+log = logging.getLogger(__name__)
+
+def tg_send(chat_id: str, text: str):
+    """
+    Универсальная функция отправки сообщений в Telegram.
+    """
+    if not (TELEGRAM_BOT_TOKEN and chat_id):
+        return
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+            json={"chat_id": chat_id, "text": text}
+        )
+    except Exception as e:
+        log.error("tg_send: %s", e)
+
+def tg_a(txt: str):
+    """
+    Отправка сообщения в Telegram-чат основного аккаунта (CHAT_A).
+    """
+    tg_send(TELEGRAM_CHAT_ID, txt)
+
+def tg_m(txt: str):
+    """
+    Отправка сообщения в Telegram-чат зеркального аккаунта (CHAT_MIR).
+    """
+    tg_send(MIRROR_B_TG_CHAT_ID, txt)
