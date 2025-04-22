@@ -6,7 +6,8 @@ log = logging.getLogger(__name__)
 
 def tg_send(chat_id: str, text: str):
     """
-    Универсальная функция отправки сообщений в Telegram.
+    Базовая функция, отправляет text в Telegram-чат chat_id
+    через TELEGRAM_BOT_TOKEN.
     """
     if not (TELEGRAM_BOT_TOKEN and chat_id):
         return
@@ -20,12 +21,14 @@ def tg_send(chat_id: str, text: str):
 
 def tg_a(txt: str):
     """
-    Отправка сообщения в Telegram-чат основного аккаунта (CHAT_A).
+    Сообщение в основной чат + пишем в логи
     """
+    log.info(f"[tg_a] {txt}")
     tg_send(TELEGRAM_CHAT_ID, txt)
 
 def tg_m(txt: str):
     """
-    Отправка сообщения в Telegram-чат зеркального аккаунта (CHAT_MIR).
+    Сообщение в зеркальный чат + пишем в логи
     """
+    log.info(f"[tg_m] {txt}")
     tg_send(MIRROR_B_TG_CHAT_ID, txt)
