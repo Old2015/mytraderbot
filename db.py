@@ -109,7 +109,7 @@ def wipe_mirror():
 
 def reset_pending():
     """
-    Сбрасываем флаг pending в таблице positions (exchange=binance).
+    Сбрасываем флаг pending в таблице positions (exchange='binance').
     """
     try:
         with pg_conn() as conn, conn.cursor() as cur:
