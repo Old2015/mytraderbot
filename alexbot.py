@@ -186,14 +186,14 @@ class AlexBot:
         if otype=="LIMIT" and status=="CANCELED":
             price = float(o.get("p", 0))
             qty   = float(o.get("q", 0))
-            txt = (f"🔵 Trader: {sym} LIMIT отменен. "
+            txt = (f"🔵 : {sym} LIMIT отменен. "
                    f"(Был {pos_color(side)} {side}, Объём: {self._fmt_qty(sym, qty)} "
                    f"по цене {self._fmt_price(sym, price)}).")
             tg_a(txt)
             pg_delete_position("positions", sym, side)
             if MIRROR_ENABLED:
                 pg_delete_position("mirror_positions", sym, side)
-                tg_m(f"[Mirror]: {pos_color(side)} Trader: {sym} LIMIT отменён (mirror).")
+                tg_m(f"[Mirror]: {pos_color(side)} : {sym} LIMIT отменён (mirror).")
             return
 
         # --- NEW LIMIT ---
@@ -202,7 +202,7 @@ class AlexBot:
             qty   = float(o.get("q", 0))
             # записываем amt=0, pending=True
             pg_upsert_position("positions", sym, side, 0.0, 0.0, 0.0, "binance", True)
-            txt = (f"🔵 Trader: {sym} Новый LIMIT {pos_color(side)} {side}. "
+            txt = (f"🔵 : {sym} Новый LIMIT {pos_color(side)} {side}. "
                    f"Объём: {self._fmt_qty(sym, qty)} по цене {self._fmt_price(sym, price)}.")
             tg_a(txt)
             return
@@ -212,7 +212,7 @@ class AlexBot:
             trg = float(o.get("sp") or o.get("p") or 0)
             if trg:
                 kind = "STOP" if "STOP" in otype else "TAKE"
-                tg_a(f"{child_color()} Trader: {sym} {kind} установлен на цену {self._fmt_price(sym, trg)}")
+                tg_a(f"{child_color()} : {sym} {kind} установлен на цену {self._fmt_price(sym, trg)}")
             return
 
         # --- FILLED ---
@@ -235,7 +235,7 @@ class AlexBot:
                 if new_amt <= 1e-8:
                     # полное закрытие
                     txt = (
-                        f"{pos_color(side)} Trader: {sym} полное закрытие позиции {side} "
+                        f"{pos_color(side)} : {sym} полное закрытие позиции {side} "
                         f"({int(round(ratio_close))}%, {self._fmt_qty(sym, old_amt)} --> 0) "
                         f"по цене {self._fmt_price(sym, fill_price)}, общий PNL: {_fmt_float(new_rpnl)}"
                     )
@@ -244,7 +244,7 @@ class AlexBot:
                 else:
                     # частичное
                     txt = (
-                        f"{pos_color(side)} Trader: {sym} частичное закрытие позиции {side} "
+                        f"{pos_color(side)} : {sym} частичное закрытие позиции {side} "
                         f"({int(round(ratio_close))}%, {self._fmt_qty(sym, old_amt)} --> {self._fmt_qty(sym, new_amt)}) "
                         f"по цене {self._fmt_price(sym, fill_price)}, текущий PNL: {_fmt_float(new_rpnl)}"
                     )
@@ -260,7 +260,7 @@ class AlexBot:
                 if old_amt < 1e-12:
                     # новая позиция
                     txt = (
-                        f"{pos_color(side)} Trader: {sym} Открыта позиция {side} {rtxt} "
+                        f"{pos_color(side)} : {sym} Открыта позиция {side} {rtxt} "
                         f"на {self._fmt_qty(sym, fill_qty)} "
                         f"по цене {self._fmt_price(sym, fill_price)}"
                     )
@@ -269,7 +269,7 @@ class AlexBot:
                     if ratio_inc>100:
                         ratio_inc=100
                     txt = (
-                        f"{pos_color(side)} Trader: {sym} Увеличение позиции {side} "
+                        f"{pos_color(side)} : {sym} Увеличение позиции {side} "
                         f"({int(round(ratio_inc))}%, {self._fmt_qty(sym, old_amt)} --> {self._fmt_qty(sym, new_amt)}) "
                         f"{rtxt} по цене {self._fmt_price(sym, fill_price)}"
                     )
@@ -310,14 +310,14 @@ class AlexBot:
         if new_m_amt <= 1e-8:
             pg_delete_position("mirror_positions", sym, side)
             tg_m((
-                f"[Mirror]: {pos_color(side)} Trader: {sym} полное закрытие {side} "
+                f"[Mirror]: {pos_color(side)} : {sym} полное закрытие {side} "
                 f"({int(round(ratio_close))}%, {self._fmt_qty(sym, old_m_amt)} --> 0.0) "
                 f"по цене {self._fmt_price(sym, fill_price)}, PNL: {_fmt_float(new_m_pnl)}"
             ))
         else:
             pg_upsert_position("mirror_positions", sym, side, new_m_amt, old_m_entry, new_m_pnl, "mirror", False)
             tg_m((
-                f"[Mirror]: {pos_color(side)} Trader: {sym} частичное закрытие {side} "
+                f"[Mirror]: {pos_color(side)} : {sym} частичное закрытие {side} "
                 f"({int(round(ratio_close))}%, {self._fmt_qty(sym, old_m_amt)} --> {self._fmt_qty(sym, new_m_amt)}) "
                 f"по цене {self._fmt_price(sym, fill_price)}, PNL: {_fmt_float(new_m_pnl)}"
             ))
@@ -346,7 +346,7 @@ class AlexBot:
 
         if old_m_amt < 1e-12:
             tg_m((
-                f"[Mirror]: {pos_color(side)} Trader: {sym} Открыта позиция {side} {rtxt} "
+                f"[Mirror]: {pos_color(side)} : {sym} Открыта позиция {side} {rtxt} "
                 f"на {self._fmt_qty(sym, inc_qty)}, Цена: {self._fmt_price(sym, fill_price)}, PNL: {_fmt_float(old_m_rpnl)}"
             ))
         else:
@@ -354,7 +354,7 @@ class AlexBot:
             if ratio_inc>100:
                 ratio_inc=100
             tg_m((
-                f"[Mirror]: {pos_color(side)} Trader: {sym} Увеличение позиции {side} "
+                f"[Mirror]: {pos_color(side)} : {sym} Увеличение позиции {side} "
                 f"({int(round(ratio_inc))}%, {self._fmt_qty(sym, old_m_amt)} --> {self._fmt_qty(sym, new_m_amt)}) "
                 f"{rtxt} по цене {self._fmt_price(sym, fill_price)}, PNL: {_fmt_float(old_m_rpnl)}"
             ))
@@ -384,7 +384,7 @@ class AlexBot:
                 vol   = abs(amt)
                 real_symbols.add((sym, side))
 
-                txt = (f"{pos_color(side)} (start) Trader: {sym} "
+                txt = (f"{pos_color(side)} (start) : {sym} "
                        f"Открыта {side} Объём: {self._fmt_qty(sym, vol)}, "
                        f"Цена: {self._fmt_price(sym, price)}")
                 # SL/TP?
@@ -418,7 +418,7 @@ class AlexBot:
                     real_limits.add((sym, side))
 
                     pg_upsert_position("positions", sym, side, 0.0, 0.0, 0.0, "binance", True)
-                    txt = (f"🔵 (start) Trader: {sym} Новый LIMIT {pos_color(side)} {side}. "
+                    txt = (f"🔵 (start) : {sym} Новый LIMIT {pos_color(side)} {side}. "
                            f"Объём: {self._fmt_qty(sym, qty)} по цене {self._fmt_price(sym, price)}.")
                     # проверяем SL/TP
                     sl = tp = None
