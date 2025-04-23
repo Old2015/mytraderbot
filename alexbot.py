@@ -82,7 +82,7 @@ class AlexBot:
             if MIRROR_ENABLED else None
         )
 
-        # Пример: словари для тик‑сайза (если уже есть)
+        # Пример: словари для тик‑сайза (если нужно)
         self.lot_size_map = {}
         self.price_size_map = {}
         self._init_symbol_precisions()
@@ -99,27 +99,54 @@ class AlexBot:
         wipe_mirror()
         reset_pending()
         self._sync_start()
+
+        # Приветствие с балансами
         self._hello()
 
-    # ---------------- Форматирование для qty/price (пример) ----------------
+    # ---------------- Пример форматирования qty/price ----------------
     def _init_symbol_precisions(self):
         """
         Если нужно — запрашиваем binance.futures_exchange_info()
         и формируем lot_size_map, price_size_map.
         """
-        pass  # Логика заполнения dict, если нужна. Иначе пусто.
+        pass  # Реализуйте при необходимости
 
     def _fmt_qty(self, symbol: str, qty: float) -> str:
-        """
-        Заглушка. Или реальная логика:
-        d = self.lot_size_map.get(symbol, 3)
-        ...
-        """
+        """Упрощённый пример: 3 знака"""
         return f"{qty:.3f}"
 
     def _fmt_price(self, symbol: str, price: float) -> str:
+        """Упрощённый пример: 2 знака"""
         return f"{price:.2f}"
-    # -----------------------------------------------------------------------
+    # -----------------------------------------------------------------
+
+    def _hello(self):
+        """
+        Приветствие + баланс.
+        Выводим в лог (консоль) и шлём в зеркальный чат (tg_m).
+        """
+        bal_main = self._usdt(self.client_a)
+        msg = f"▶️  Бот запущен.\nОсновной аккаунт: {_fmt_float(bal_main)} USDT"
+
+        if self.client_b and MIRROR_ENABLED:
+            bal_mirr = self._usdt(self.client_b)
+            msg += f"\nЗеркальный аккаунт активен: {_fmt_float(bal_mirr)} USDT"
+
+        # Пишем в лог
+        log.info(msg)
+        # Посылаем в зеркальный чат (как и было в примере)
+        tg_m(msg)
+
+    def _usdt(self, client: Client) -> float:
+        """Возвращаем баланс USDT."""
+        try:
+            bals = client.futures_account_balance()
+            for b in bals:
+                if b["asset"]=="USDT":
+                    return float(b["balance"])
+        except Exception as e:
+            log.error("_usdt: %s", e)
+        return 0.0
 
     def _ws_handler(self, msg: Dict[str,Any]):
         pg_raw(msg)
@@ -187,7 +214,6 @@ class AlexBot:
             # ---- (1) Если это STOP/TAKE, пишем "активирован" ----
             if otype in CHILD_TYPES:
                 kind = "STOP" if "STOP" in otype else "TAKE"
-                # triggerPrice - это обычно o["sp"], но fill_price может быть другим
                 trigger_price = float(o.get("sp", 0))
                 tg_a(
                     f"{child_color()} Trader: {sym} {kind} активирован по цене {self._fmt_price(sym, trigger_price)} "
@@ -328,27 +354,24 @@ class AlexBot:
             ))
 
     def _diff_positions(self):
+        """
+        Заглушка: если нужно, периодически сверять фактические позиции и БД.
+        """
         log.debug("_diff_positions called")
 
     def _sync_start(self):
         """
-        Подтягивает реальные позиции и ордера, синхронизирует с БД.
+        Синхронизация при старте: смотрим реальные позиции, лимиты,
+        добавляем в БД, удаляем лишнее.
         """
         log.debug("_sync_start called")
-        # Ваш код, который уже был (получаем futures_position_information,
-        # futures_get_open_orders, pg_upsert_position, удаляем лишнее из БД).
+        # … ваш код из предыдущих версий (futures_position_information, futures_get_open_orders)
         pass
-
-    def _hello(self):
-        """
-        Приветствие + баланс
-        """
-        log.debug("_hello called")
-        tg_m("▶️  Бот запущен.")  # И т.д. если надо.   
 
     def run(self):
         log.debug("AlexBot.run called")
         try:
+            # Печатаем в консоль
             log.info("[Main] bot running ... Ctrl+C to stop")
             while True:
                 time.sleep(1)
