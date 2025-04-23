@@ -25,8 +25,8 @@ CHILD_TYPES = {
     "TAKE_PROFIT","TAKE_PROFIT_LIMIT","TAKE_PROFIT_MARKET"
 }
 
-def pos_color(side:str) -> str:
-    return "🟢" if side=="LONG" else "🔴"
+def pos_color(side: str) -> str:
+    return "🟢" if side == "LONG" else "🔴"
 
 def child_color() -> str:
     return "🔵"
@@ -36,7 +36,7 @@ def decode_side(o: Dict[str,Any]) -> str:
     Определяем, LONG это или SHORT, учитывая reduceOnly (R).
     """
     reduce_flag = bool(o.get("R", False))
-    raw_side    = o["S"]  # "BUY" / "SELL"
+    raw_side = o["S"]  # "BUY" / "SELL"
     if reduce_flag:
         # Закрываем / уменьшаем
         if raw_side == "BUY":
@@ -52,7 +52,7 @@ def decode_side(o: Dict[str,Any]) -> str:
 
 def reason_text(otype: str) -> str:
     """
-    "(MARKET)", "(LIMIT)", "(STOP_MARKET)" и т.п.
+    Возвращает "(MARKET)", "(LIMIT)", "(STOP_MARKET)" и т.п. для читабельности.
     """
     mp = {
         "MARKET": "(MARKET)",
@@ -66,8 +66,7 @@ def reason_text(otype: str) -> str:
 
 def _fmt_float(x: float, digits: int = 4) -> str:
     """
-    Универсальное форматирование x на `digits` знаков (для PNL, баланса).
-    Убираем лишние нули в конце.
+    Универсальное форматирование на `digits` знаков, убирая лишние нули.
     """
     s = f"{x:.{digits}f}"
     return s.rstrip('0').rstrip('.') if '.' in s else s
@@ -82,12 +81,14 @@ class AlexBot:
             if MIRROR_ENABLED else None
         )
 
-        # Пример: словари для тик‑сайза (если нужно)
-        self.lot_size_map = {}
+        # Словари точностей для qty/price
+        self.lot_size_map   = {}
         self.price_size_map = {}
+
+        # Инициируем точность
         self._init_symbol_precisions()
 
-        # Запуск WebSocket
+        # Запуск WS
         self.ws = ThreadedWebsocketManager(
             api_key=BINANCE_API_KEY,
             api_secret=BINANCE_API_SECRET
@@ -95,35 +96,67 @@ class AlexBot:
         self.ws.start()
         self.ws.start_futures_user_socket(callback=self._ws_handler)
 
-        # Первоначальная очистка / синхронизация
+        # Сброс / синхронизация
         wipe_mirror()
         reset_pending()
         self._sync_start()
-
-        # Приветствие с балансами
         self._hello()
 
-    # ---------------- Пример форматирования qty/price ----------------
+    # ───────────────────────────── Точность ───────────────────────────
     def _init_symbol_precisions(self):
         """
-        Если нужно — запрашиваем binance.futures_exchange_info()
-        и формируем lot_size_map, price_size_map.
+        Запрашиваем futures_exchange_info(),
+        заполняем lot_size_map и price_size_map для каждой пары.
         """
-        pass  # Реализуйте при необходимости
+        log.debug("_init_symbol_precisions called")
+        try:
+            info = self.client_a.futures_exchange_info()
+            for s in info["symbols"]:
+                sym_name = s["symbol"]
+                lot_dec = 4
+                price_dec = 4
+                for f in s["filters"]:
+                    if f["filterType"] == "LOT_SIZE":
+                        lot_dec = self._step_to_decimals(f["stepSize"])
+                    elif f["filterType"] == "PRICE_FILTER":
+                        price_dec = self._step_to_decimals(f["tickSize"])
+                self.lot_size_map[sym_name]   = lot_dec
+                self.price_size_map[sym_name] = price_dec
+
+            log.info("_init_symbol_precisions: loaded %d symbols", len(info["symbols"]))
+        except Exception as e:
+            log.error("_init_symbol_precisions: %s", e)
+
+    @staticmethod
+    def _step_to_decimals(step_str: str) -> int:
+        """
+        '0.00000100' -> 6, '0.01'->2, '1'->0
+        """
+        s = step_str.rstrip('0')
+        if '.' not in s:
+            return 0
+        return len(s.split('.')[1])
 
     def _fmt_qty(self, symbol: str, qty: float) -> str:
-        """Упрощённый пример: 3 знака"""
-        return f"{qty:.3f}"
+        """
+        Форматируем объём по lot_size_map.
+        """
+        dec = self.lot_size_map.get(symbol, 4)
+        val = f"{qty:.{dec}f}"
+        return val.rstrip('0').rstrip('.') if '.' in val else val
 
     def _fmt_price(self, symbol: str, price: float) -> str:
-        """Упрощённый пример: 2 знака"""
-        return f"{price:.2f}"
-    # -----------------------------------------------------------------
+        """
+        Форматируем цену по price_size_map.
+        """
+        dec = self.price_size_map.get(symbol, 4)
+        val = f"{price:.{dec}f}"
+        return val.rstrip('0').rstrip('.') if '.' in val else val
+    # ───────────────────────────────────────────────────────────────────
 
     def _hello(self):
         """
-        Приветствие + баланс.
-        Выводим в лог (консоль) и шлём в зеркальный чат (tg_m).
+        Приветствие, баланс в лог и зеркальный чат.
         """
         bal_main = self._usdt(self.client_a)
         msg = f"▶️  Бот запущен.\nОсновной аккаунт: {_fmt_float(bal_main)} USDT"
@@ -132,23 +165,125 @@ class AlexBot:
             bal_mirr = self._usdt(self.client_b)
             msg += f"\nЗеркальный аккаунт активен: {_fmt_float(bal_mirr)} USDT"
 
-        # Пишем в лог
         log.info(msg)
-        # Посылаем в зеркальный чат (как и было в примере)
         tg_m(msg)
 
     def _usdt(self, client: Client) -> float:
-        """Возвращаем баланс USDT."""
+        """Возвращаем баланс USDT для данного клиента."""
         try:
             bals = client.futures_account_balance()
             for b in bals:
-                if b["asset"]=="USDT":
+                if b["asset"] == "USDT":
                     return float(b["balance"])
         except Exception as e:
             log.error("_usdt: %s", e)
         return 0.0
 
+    def _sync_start(self):
+        """
+        При старте: подтягиваем реальные позиции/лимиты, пишем в БД, удаляем всё лишнее.
+        """
+        log.debug("_sync_start called")
+        try:
+            # 1) Получаем реальные открытые позиции
+            positions = self.client_a.futures_position_information()
+            real_symbols = set()
+            for p in positions:
+                amt = float(p["positionAmt"])
+                if abs(amt) < 1e-12:
+                    continue  # пропускаем пустые
+                sym   = p["symbol"]
+                side  = "LONG" if amt>0 else "SHORT"
+                price = float(p["entryPrice"])
+                vol   = abs(amt)
+                real_symbols.add((sym, side))
+
+                # Высылаем инфу в Телеграм
+                txt = (f"{pos_color(side)} (start) Trader: {sym} "
+                       f"Открыта {side} Объём: {self._fmt_qty(sym, vol)}, "
+                       f"Цена: {self._fmt_price(sym, price)}")
+
+                # Ищем SL/TP
+                open_orders = self.client_a.futures_get_open_orders(symbol=sym)
+                sl = tp = None
+                for od in open_orders:
+                    if od["type"] in CHILD_TYPES and od["status"]=="NEW":
+                        trg = float(od.get("stopPrice") or od.get("price") or 0)
+                        if trg:
+                            if "STOP" in od["type"]:
+                                sl = trg
+                            else:
+                                tp = trg
+                if sl:
+                    txt += f", SL={self._fmt_price(sym, sl)}"
+                if tp:
+                    txt += f", TP={self._fmt_price(sym, tp)}"
+                tg_a(txt)
+
+                # Запись в БД
+                pg_upsert_position("positions", sym, side, vol, price, 0.0, "binance", False)
+
+            # 2) Получаем открытые лимитные ордера
+            orders = self.client_a.futures_get_open_orders()
+            real_limits = set()
+            for od in orders:
+                if od["type"] == "LIMIT" and od["status"] == "NEW":
+                    sym   = od["symbol"]
+                    price = float(od["price"])
+                    qty   = float(od["origQty"])
+                    side  = "LONG" if od["side"]=="BUY" else "SHORT"
+                    real_limits.add((sym, side))
+
+                    pg_upsert_position("positions", sym, side, 0.0, 0.0, 0.0, "binance", True)
+                    txt = (f"🔵 (start) Trader: {sym} Новый LIMIT {pos_color(side)} {side}. "
+                           f"Объём: {self._fmt_qty(sym, qty)} по цене {self._fmt_price(sym, price)}.")
+
+                    # SL/TP?
+                    sl = tp = None
+                    for ch in orders:
+                        if (ch["symbol"]==sym and ch["status"]=="NEW"
+                                and ch["orderId"]!=od["orderId"]
+                                and ch["type"] in CHILD_TYPES):
+                            trg = float(ch.get("stopPrice") or ch.get("price") or 0)
+                            if trg:
+                                if "STOP" in ch["type"]:
+                                    sl = trg
+                                else:
+                                    tp = trg
+                    if sl:
+                        txt += f" SL={self._fmt_price(sym, sl)}"
+                    if tp:
+                        txt += f" TP={self._fmt_price(sym, tp)}"
+                    tg_a(txt)
+
+            # 3) Удаляем из БД всё, чего нет на бирже
+            with pg_conn() as conn, conn.cursor() as cur:
+                cur.execute("""
+                    SELECT symbol, position_side, position_amt, pending
+                      FROM public.positions
+                     WHERE exchange='binance'
+                """)
+                rows = cur.fetchall()
+                for (db_sym, db_side, db_amt, db_pending) in rows:
+                    key = (db_sym, db_side)
+                    if db_pending:
+                        # Лимит
+                        if key not in real_limits:
+                            log.info("Removing old LIMIT from DB: %s, %s", db_sym, db_side)
+                            pg_delete_position("positions", db_sym, db_side)
+                    else:
+                        # Открытая позиция
+                        if key not in real_symbols:
+                            log.info("Removing old POSITION from DB: %s, %s", db_sym, db_side)
+                            pg_delete_position("positions", db_sym, db_side)
+
+        except Exception as e:
+            log.error("_sync_start: %s", e)
+
     def _ws_handler(self, msg: Dict[str,Any]):
+        """
+        Callback для каждого WS-сообщения. Сохраняем raw, если ORDER_TRADE_UPDATE -> _on_order
+        """
         pg_raw(msg)
         log.debug("[WS] %s", msg)
         if msg.get("e") == "ORDER_TRADE_UPDATE":
@@ -157,18 +292,20 @@ class AlexBot:
 
     def _on_order(self, o: Dict[str,Any]):
         """
-        Обработка события ORDER_TRADE_UPDATE.
-        Если STOP/TAKE FILLED => печатаем "STOP активирован", затем идём к логике reduceOnly.
+        Основная логика обработки ордера:
+          - STOP активирован
+          - FULL/PARTIAL close
+          - PnL = o["rp"]
         """
         sym    = o["s"]
         otype  = o["ot"]         # MARKET/LIMIT/STOP...
         status = o["X"]          # NEW/FILLED/CANCELED...
-        fill_price = float(o.get("ap", 0))  # последняя цена исполнения
+        fill_price = float(o.get("ap", 0))  # средняя цена исполнения
         fill_qty   = float(o.get("l", 0))   # объём исполнения
         reduce_flag= bool(o.get("R", False))
         side       = decode_side(o)
 
-        # Реализованный PnL, который Binance сам считает (учитывая комиссию)
+        # PnL от Binance
         partial_pnl = float(o.get("rp", 0.0))
         rtxt = reason_text(otype)
 
@@ -196,7 +333,7 @@ class AlexBot:
             tg_a(txt)
             return
 
-        # --- NEW STOP/TAKE ---
+        # --- NEW child STOP/TAKE ---
         if otype in CHILD_TYPES and status=="NEW":
             trg = float(o.get("sp") or o.get("p") or 0)
             if trg:
@@ -204,25 +341,25 @@ class AlexBot:
                 tg_a(f"{child_color()} Trader: {sym} {kind} установлен на цену {self._fmt_price(sym, trg)}")
             return
 
-        # ================= FILLED =================
+        # ---------------- FILLED (MARKET, LIMIT, STOP...) ----------------
         if status == "FILLED":
             if fill_qty < 1e-12:
                 return
+
             old_amt, old_entry, old_rpnl = pg_get_position("positions", sym, side) or (0.0, 0.0, 0.0)
             new_rpnl = old_rpnl + partial_pnl
 
-            # ---- (1) Если это STOP/TAKE, пишем "активирован" ----
+            # Если это STOP/TAKE => "активирован"
             if otype in CHILD_TYPES:
                 kind = "STOP" if "STOP" in otype else "TAKE"
-                trigger_price = float(o.get("sp", 0))
+                trigger_price = float(o.get("sp") or 0)
                 tg_a(
                     f"{child_color()} Trader: {sym} {kind} активирован по цене {self._fmt_price(sym, trigger_price)} "
                     f"(факт. исполнение {self._fmt_price(sym, fill_price)})"
                 )
 
-            # ---- (2) Основная логика reduce-only или открытия ----
             if reduce_flag:
-                # закрытие / уменьшение
+                # Закрытие / уменьшение
                 new_amt = old_amt - fill_qty
                 ratio_close = (fill_qty / old_amt)*100 if old_amt>1e-12 else 100
                 if ratio_close>100:
@@ -247,7 +384,6 @@ class AlexBot:
                     tg_a(txt)
                     pg_upsert_position("positions", sym, side, new_amt, old_entry, new_rpnl, "binance", False)
 
-                # зеркальное закрытие
                 if MIRROR_ENABLED:
                     self._mirror_reduce(sym, side, fill_qty, fill_price, partial_pnl)
 
@@ -270,6 +406,7 @@ class AlexBot:
                         f"({int(round(ratio_inc))}%, {self._fmt_qty(sym, old_amt)} --> {self._fmt_qty(sym, new_amt)}) "
                         f"{rtxt} по цене {self._fmt_price(sym, fill_price)}"
                     )
+
                 tg_a(txt)
                 pg_upsert_position("positions", sym, side, new_amt, fill_price, new_rpnl, "binance", False)
 
@@ -355,23 +492,13 @@ class AlexBot:
 
     def _diff_positions(self):
         """
-        Заглушка: если нужно, периодически сверять фактические позиции и БД.
+        Заглушка: можете периодически сверять фактические позиции и БД, если нужно.
         """
         log.debug("_diff_positions called")
-
-    def _sync_start(self):
-        """
-        Синхронизация при старте: смотрим реальные позиции, лимиты,
-        добавляем в БД, удаляем лишнее.
-        """
-        log.debug("_sync_start called")
-        # … ваш код из предыдущих версий (futures_position_information, futures_get_open_orders)
-        pass
 
     def run(self):
         log.debug("AlexBot.run called")
         try:
-            # Печатаем в консоль
             log.info("[Main] bot running ... Ctrl+C to stop")
             while True:
                 time.sleep(1)
