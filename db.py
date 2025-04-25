@@ -15,6 +15,46 @@ def pg_conn():
     )
     return psycopg2.connect(dsn)
 
+def pg_upsert_order(symbol: str,
+                    side: str,
+                    order_id: int,
+                    qty: float,
+                    price: float,
+                    status: str = "NEW"):
+    """
+    Добавляем/обновляем запись в таблицу orders по ключу (symbol, side, order_id).
+    """
+    try:
+        with pg_conn() as conn, conn.cursor() as cur:
+            cur.execute("""
+              INSERT INTO public.orders (symbol, position_side, order_id,
+                                         qty, price, status)
+              VALUES (%s, %s, %s, %s, %s, %s)
+              ON CONFLICT (symbol, position_side, order_id)
+              DO UPDATE SET
+                qty     = EXCLUDED.qty,
+                price   = EXCLUDED.price,
+                status  = EXCLUDED.status,
+                updated_at = now();
+            """, (symbol, side, order_id, qty, price, status))
+    except Exception as e:
+        log.error("pg_upsert_order: %s", e)
+
+def pg_delete_order(symbol: str, side: str, order_id: int):
+    """
+    Удаляем конкретный лимит-ордер.
+    """
+    try:
+        with pg_conn() as conn, conn.cursor() as cur:
+            cur.execute("""
+                DELETE FROM public.orders
+                 WHERE symbol=%s
+                   AND position_side=%s
+                   AND order_id=%s
+            """, (symbol, side, order_id))
+    except Exception as e:
+        log.error("pg_delete_order: %s", e)
+        
 def pg_raw(msg: Dict[str, Any]):
     """
     Сохраняем ВСЁ WS‑сообщение в futures_events.
