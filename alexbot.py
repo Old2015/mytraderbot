@@ -224,12 +224,12 @@ class AlexBot:
                 real_positions.add((sym, side))
 
                 # Пример вывода: 🟢 (start) Trader: ENAUSDT Открыта LONG Объём: 1900, Цена: 0.3423
-                txt= (f"{pos_color(side)} (start) Trader: {sym} Открыта {side_name(side)} "
+                txt= (f"{pos_color(side)} (restart) Trader: {sym} Открыта {side_name(side)} "
                       f"Объём: {self._fmt_qty(sym, vol)}, Цена: {self._fmt_price(sym, price)}")
 
                 # Далее можно поискать SL/TP
                 # (но это child-ордер, мы это делаем в разделе open_orders)
-                tg_a(txt)
+                tg_m(txt)
 
                 # upsert
                 pg_upsert_position("positions", sym, side, vol, price, 0.0, "binance", False)
@@ -264,14 +264,14 @@ class AlexBot:
                 if otype in CHILD_TYPES:
                     # Пример: 🔵 (start) Trader: SKLUSDT ЛОНГ STOP установлен на цену 0.023
                     kind= "STOP" if "STOP" in otype else "TAKE"
-                    txt= (f"{child_color()} (start) Trader: {sym} {side_name(side)} "
+                    txt= (f"{child_color()} (restart) Trader: {sym} {side_name(side)} "
                           f"{kind} установлен на цену {self._fmt_price(sym, main_price)}")
                 else:
                     # LIMIT
                     txt= (f"{pos_color(side)} (start) Trader: {sym} {side_name(side)} "
                           f"LIMIT, Qty: {self._fmt_qty(sym, orig_qty)}, Price: {self._fmt_price(sym, main_price)}")
 
-                tg_a(txt)
+                tg_m(txt)
 
             # --- чистим лишнее ---
             from db import pg_delete_order
