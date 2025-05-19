@@ -12,10 +12,17 @@ def tg_send(chat_id: str, text: str):
     if not (TELEGRAM_BOT_TOKEN and chat_id):
         return
     try:
-        requests.post(
+        response = requests.post(
             f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-            json={"chat_id": chat_id, "text": text}
+            json={"chat_id": chat_id, "text": text},
+            timeout=10            
         )
+        if not response.ok:
+            log.error(
+                "tg_send failed: status=%s text=%s",
+                response.status_code,
+                response.text,
+            )
     except Exception as e:
         log.error("tg_send: %s", e)
 

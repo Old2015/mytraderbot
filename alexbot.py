@@ -2,7 +2,6 @@ import time
 import logging
 from typing import Dict, Any
 
-import psycopg2
 from binance.client import Client
 from binance import ThreadedWebsocketManager
 
@@ -86,10 +85,17 @@ class AlexBot:
     def __init__(self):
         log.debug("AlexBot.__init__ called")
 
+        self.mirror_enabled = MIRROR_ENABLED
+        if self.mirror_enabled and not (MIRROR_B_API_KEY and MIRROR_B_API_SECRET):
+            log.error(
+                "MIRROR_ENABLED but MIRROR_B_API_KEY/SECRET not provided; disabling mirror mode"
+            )
+            self.mirror_enabled = False
+
         self.client_a = Client(BINANCE_API_KEY, BINANCE_API_SECRET)
         self.client_b = (
             Client(MIRROR_B_API_KEY, MIRROR_B_API_SECRET)
-            if MIRROR_ENABLED else None
+            if self.mirror_enabled else None
         )
 
         self.lot_size_map = {}
@@ -149,7 +155,7 @@ class AlexBot:
     def _hello(self):
         bal_main= self._usdt(self.client_a)
         msg= f"▶️  Бот запущен.\nОсновной аккаунт: {_fmt_float(bal_main)} USDT"
-        if self.client_b and MIRROR_ENABLED:
+        if self.mirror_enabled:
             bal_m= self._usdt(self.client_b)
             msg += f"\nЗеркальный аккаунт активен: {_fmt_float(bal_m)} USDT"
         log.info(msg)
@@ -371,7 +377,7 @@ class AlexBot:
                     tg_a(txt)
                     pg_upsert_position("positions", sym, side, new_amt, old_entry, new_rpnl, "binance", False)
 
-                if MIRROR_ENABLED:
+                if self.mirror_enabled:
                     self._mirror_reduce(sym, side, fill_qty, fill_price, partial_pnl)
             else:
                 new_amt= old_amt+ fill_qty
@@ -392,7 +398,7 @@ class AlexBot:
                 tg_a(txt)
                 pg_upsert_position("positions", sym, side, new_amt, fill_price, new_rpnl, "binance", False)
 
-                if MIRROR_ENABLED:
+                if self.mirror_enabled:
                     self._mirror_increase(sym, side, fill_qty, fill_price, reason_text(otype))
 
     def _mirror_reduce(self, sym:str, side:str, fill_qty:float, fill_price:float, partial_pnl:float):
@@ -412,11 +418,11 @@ class AlexBot:
                 side=side_binance,
                 type="MARKET",
                 quantity=dec_qty,
-                reduceOnly=True
+                reduceOnly=True,
             )
         except Exception as e:
             log.error("_mirror_reduce: %s", e)
-
+            return
         if new_m_amt<=1e-8:
             pg_delete_position("mirror_positions", sym, side)
             txt= (f"[Mirror]: {pos_color(side)} Trader: {sym} полное закрытие позиции {side_name(side)} "
@@ -441,11 +447,11 @@ class AlexBot:
                 symbol=sym,
                 side=side_binance,
                 type="MARKET",
-                quantity=inc_qty
+                quantity=inc_qty,
             )
         except Exception as e:
             log.error("_mirror_increase: %s", e)
-
+            return
         pg_upsert_position("mirror_positions", sym, side, new_m_amt, fill_price, old_m_rpnl, "mirror", False)
 
         if old_m_amt<1e-12:
