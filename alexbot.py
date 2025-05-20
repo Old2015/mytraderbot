@@ -512,6 +512,7 @@ class AlexBot:
         log.debug("AlexBot.run called")
         try:
             log.info("[Main] bot running ... Ctrl+C to stop")
+            self._maybe_monthly_report()
             while True:
                 self._maybe_monthly_report()
                 time.sleep(1)
