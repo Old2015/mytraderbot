@@ -21,6 +21,7 @@ from db import (
 )
 from telegram_bot import tg_a, tg_m
 from typing import Optional
+from datetime import datetime, date
 
 log = logging.getLogger(__name__)
 
@@ -121,6 +122,8 @@ class AlexBot:
         self._hello()
 
         self.last_report_month = None
+        # NEW: Выводим "разрешен ли отчёт" + отчёт за прошлый месяц СРАЗУ
+        self._monthly_info_at_start()   # <-- вызываем метод
 
     # ---------- точность ----------
     def _init_symbol_precisions(self):
@@ -272,6 +275,51 @@ class AlexBot:
 
         except Exception as e:
             log.error("_sync_start: %s", e)
+
+
+    # NEW: метод, вызываемый при старте для вывода инфы в зеркальный чат
+    def _monthly_info_at_start(self):
+        """
+        1) Пишем: "Отчёт в основную группу каждого 1го числа: [да/нет]" 
+        2) Пишем отчёт за ПРЕДЫДУЩИЙ месяц (или "нет данных"), всё в tg_m.
+        """
+        # 1) Разрешен ли вывод
+        if MONTHLY_REPORT_ENABLED:
+            line1 = "Отчёт в основную группу первого числа: ВКЛЮЧЕН"
+        else:
+            line1 = "Отчёт в основную группу первого числа: ОТКЛЮЧЕН"
+
+        # 2) Отчёт за прошлый месяц
+        # Определяем предыдущий месяц
+        today = date.today()
+        if today.month == 1:
+            year = today.year - 1
+            month = 12
+        else:
+            year = today.year
+            month = today.month - 1
+
+        trades = pg_get_closed_trades_for_month(year, month)
+        if not trades:
+            # нет данных
+            line2 = f"Данных за {month:02d}.{year} нет, отчёт не сформирован."
+        else:
+            # есть сделки
+            lines = []
+            lines.append(f"📊 Отчёт за {month:02d}.{year}")
+            total=0.0
+            for closed_at, symbol, side, volume, pnl in trades:
+                dt_str = closed_at.strftime("%d.%m %H:%M")
+                lines.append(f"{dt_str} - {symbol} - {side} - Volume: {_fmt_float(volume)} - PNL={_fmt_float(pnl)} usdt")
+                total+= float(pnl)
+            lines.append(f"Итоговый PNL: {_fmt_float(total)} usdt")
+            line2= "\n".join(lines)
+
+        msg = line1 + "\n" + line2
+        tg_m(msg)
+
+
+
 
     def _ws_handler(self, msg:Dict[str,Any]):
         pg_raw(msg)
