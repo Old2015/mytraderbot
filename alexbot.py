@@ -1,5 +1,6 @@
 import time
 import logging
+from datetime import datetime, timedelta
 from typing import Dict, Any
 
 from binance.client import Client
@@ -8,13 +9,15 @@ from binance import ThreadedWebsocketManager
 from config import (
     BINANCE_API_KEY, BINANCE_API_SECRET,
     MIRROR_ENABLED, MIRROR_B_API_KEY, MIRROR_B_API_SECRET,
-    MIRROR_COEFFICIENT
+    MIRROR_COEFFICIENT,
+    MONTHLY_REPORT_ENABLED,
 )
 from db import (
     pg_conn, pg_raw,
     pg_upsert_position, pg_delete_position, pg_get_position,
     wipe_mirror, reset_pending,
-    pg_upsert_order, pg_delete_order
+    pg_upsert_order, pg_delete_order,
+    pg_insert_closed_trade, pg_get_closed_trades_for_month,
 )
 from telegram_bot import tg_a, tg_m
 
@@ -115,6 +118,8 @@ class AlexBot:
         reset_pending()
         self._sync_start()
         self._hello()
+
+        self.last_report_month = None
 
     # ---------- точность ----------
     def _init_symbol_precisions(self):
@@ -369,6 +374,7 @@ class AlexBot:
                           f"({int(ratio)}%, {_fmt_float(old_amt)} --> 0) "
                           f"по цене {self._fmt_price(sym, fill_price)}, общий PNL: {_fmt_float(new_rpnl)}")
                     tg_a(txt)
+                    pg_insert_closed_trade(sym, side, old_amt, new_rpnl)
                     pg_delete_position("positions", sym, side)
                 else:
                     txt= (f"{pos_color(side)} Trader: {sym} частичное закрытие позиции {side_name(side)} "
@@ -469,11 +475,46 @@ class AlexBot:
                   f"{rtxt} по цене {self._fmt_price(sym, fill_price)}")
             tg_m(txt)
 
+    def _maybe_monthly_report(self):
+        if not MONTHLY_REPORT_ENABLED:
+            return
+        today = datetime.utcnow().date()
+        if today.day != 1:
+            return
+        cur_month = (today.year, today.month)
+        if self.last_report_month == cur_month:
+            return
+
+        # предыдущий месяц
+        if today.month == 1:
+            year = today.year - 1
+            month = 12
+        else:
+            year = today.year
+            month = today.month - 1
+
+        trades = pg_get_closed_trades_for_month(year, month)
+        if not trades:
+            self.last_report_month = cur_month
+            return
+
+        lines = [f"📊 Отчёт за {month:02d}.{year}"]
+        total = 0.0
+        for closed_at, symbol, side, volume, pnl in trades:
+            dt_str = closed_at.strftime("%d-%m %H:%M")
+            lines.append(f"{dt_str} - {symbol} - {_fmt_float(volume)} - {_fmt_float(pnl)}")
+            total += float(pnl)
+        lines.append(f"Итоговый PNL: {_fmt_float(total)}")
+        tg_a("\n".join(lines))
+        self.last_report_month = cur_month
+
     def run(self):
         log.debug("AlexBot.run called")
         try:
             log.info("[Main] bot running ... Ctrl+C to stop")
+            self._maybe_monthly_report()
             while True:
+                self._maybe_monthly_report()
                 time.sleep(1)
         except KeyboardInterrupt:
             tg_m("⏹️  Бот остановлен пользователем")
