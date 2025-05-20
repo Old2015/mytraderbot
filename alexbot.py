@@ -475,7 +475,9 @@ class AlexBot:
                   f"{rtxt} по цене {self._fmt_price(sym, fill_price)}")
             tg_m(txt)
 
-    def _maybe_monthly_report(self):
+
+    def _maybe_monthly_report(self, send_fn=tg_a, prefix: str | None = None):
+
         if not MONTHLY_REPORT_ENABLED:
             return
         today = datetime.utcnow().date()
@@ -498,21 +500,31 @@ class AlexBot:
             self.last_report_month = cur_month
             return
 
-        lines = [f"📊 Отчёт за {month:02d}.{year}"]
+
+        lines = []
+        if prefix:
+            lines.append(prefix)
+        lines.append(f"📊 Отчёт за {month:02d}.{year}")
+
         total = 0.0
         for closed_at, symbol, side, volume, pnl in trades:
             dt_str = closed_at.strftime("%d-%m %H:%M")
             lines.append(f"{dt_str} - {symbol} - {_fmt_float(volume)} - {_fmt_float(pnl)}")
             total += float(pnl)
         lines.append(f"Итоговый PNL: {_fmt_float(total)}")
-        tg_a("\n".join(lines))
+
+        send_fn("\n".join(lines))
+
         self.last_report_month = cur_month
 
     def run(self):
         log.debug("AlexBot.run called")
         try:
             log.info("[Main] bot running ... Ctrl+C to stop")
-            self._maybe_monthly_report()
+
+            # Check monthly report on startup for mirror chat
+            self._maybe_monthly_report(send_fn=tg_m, prefix="Вывод в зеркальный чат")
+
             while True:
                 self._maybe_monthly_report()
                 time.sleep(1)
