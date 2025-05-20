@@ -514,6 +514,7 @@ class AlexBot:
             log.info("[Main] bot running ... Ctrl+C to stop")
             # На старте отправляем возможный отчёт только в зеркальный канал
             self._maybe_monthly_report(send_fn=tg_m)
+
             while True:
                 self._maybe_monthly_report()
                 time.sleep(1)
