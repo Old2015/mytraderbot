@@ -24,6 +24,3 @@ MIRROR_ENABLED     = os.getenv("MIRROR_ENABLED", "false").lower() in ("1", "true
 MIRROR_B_API_KEY   = os.getenv("MIRROR_B_API_KEY")
 MIRROR_B_API_SECRET= os.getenv("MIRROR_B_API_SECRET")
 MIRROR_COEFFICIENT = float(os.getenv("MIRROR_COEFFICIENT", "1.0"))
-
-# Monthly summary
-MONTHLY_REPORT_ENABLED = os.getenv("MONTHLY_REPORT_ENABLED", "false").lower() in ("1", "true", "yes")
