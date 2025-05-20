@@ -20,6 +20,7 @@ from db import (
     pg_insert_closed_trade, pg_get_closed_trades_for_month,
 )
 from telegram_bot import tg_a, tg_m
+from typing import Optional
 
 log = logging.getLogger(__name__)
 
@@ -476,7 +477,7 @@ class AlexBot:
             tg_m(txt)
 
 
-    def _maybe_monthly_report(self, send_fn=tg_a, prefix: str | None = None):
+    def _maybe_monthly_report(self, send_fn=tg_a, prefix: Optional[str] = None):
 
         if not MONTHLY_REPORT_ENABLED:
             return
