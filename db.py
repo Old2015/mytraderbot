@@ -199,3 +199,18 @@ def pg_get_closed_trades_for_month(year: int, month: int):
     except Exception as e:
         log.error("pg_get_closed_trades_for_month: %s", e)
         return []
+
+
+def pg_purge_old_futures_events(days: int):
+    """Delete futures_events entries older than the specified number of days."""
+    try:
+        with pg_conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                DELETE FROM public.futures_events
+                      WHERE created_at < now() - (%s || ' days')::interval
+                """,
+                (days,),
+            )
+    except Exception as e:
+        log.error("pg_purge_old_futures_events: %s", e)
