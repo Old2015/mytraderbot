@@ -1,6 +1,6 @@
 import time
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, date, timedelta
 from typing import Dict, Any
 
 from binance.client import Client
@@ -11,6 +11,7 @@ from config import (
     MIRROR_ENABLED, MIRROR_B_API_KEY, MIRROR_B_API_SECRET,
     MIRROR_COEFFICIENT,
     MONTHLY_REPORT_ENABLED,
+    FUTURES_EVENTS_RETENTION_DAYS,
 )
 from db import (
     pg_conn, pg_raw,
@@ -18,10 +19,10 @@ from db import (
     wipe_mirror, reset_pending,
     pg_upsert_order, pg_delete_order,
     pg_insert_closed_trade, pg_get_closed_trades_for_month,
+    pg_purge_old_futures_events,
 )
 from telegram_bot import tg_a, tg_m
 from typing import Optional
-from datetime import datetime, date
 
 log = logging.getLogger(__name__)
 
@@ -122,6 +123,7 @@ class AlexBot:
         self._hello()
 
         self.last_report_month = None
+        self._last_purge_date = None
         # NEW: Выводим "разрешен ли отчёт" + отчёт за прошлый месяц СРАЗУ
         self._monthly_info_at_start()   # <-- вызываем метод
 
@@ -566,6 +568,14 @@ class AlexBot:
 
         self.last_report_month = cur_month
 
+    def _maybe_purge_events(self):
+        """Purge old futures_events records once per day."""
+        today = datetime.utcnow().date()
+        if self._last_purge_date == today:
+            return
+        pg_purge_old_futures_events(FUTURES_EVENTS_RETENTION_DAYS)
+        self._last_purge_date = today
+
     def run(self):
         log.debug("AlexBot.run called")
         try:
@@ -573,9 +583,11 @@ class AlexBot:
 
             # Check monthly report on startup for mirror chat
             self._maybe_monthly_report(send_fn=tg_m, prefix="Вывод в зеркальный чат")
+            self._maybe_purge_events()
 
             while True:
                 self._maybe_monthly_report()
+                self._maybe_purge_events()
                 time.sleep(1)
         except KeyboardInterrupt:
             tg_m("⏹️  Бот остановлен пользователем")

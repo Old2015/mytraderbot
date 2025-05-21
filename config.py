@@ -27,3 +27,6 @@ MIRROR_COEFFICIENT = float(os.getenv("MIRROR_COEFFICIENT", "1.0"))
 
 # Monthly summary
 MONTHLY_REPORT_ENABLED = os.getenv("MONTHLY_REPORT_ENABLED", "true").lower() in ("1", "true", "yes")
+
+# Retention period for futures_events table in days
+FUTURES_EVENTS_RETENTION_DAYS = int(os.getenv("FUTURES_EVENTS_RETENTION_DAYS", "30"))
