@@ -157,20 +157,59 @@ def reset_pending():
     except Exception as e:
         log.error("reset_pending: %s", e)
 
-def pg_insert_closed_trade(symbol: str, side: str, volume: float, pnl: float, closed_at=None):
+def pg_insert_closed_trade(
+    symbol: str,
+    side: str,
+    volume: float,
+    pnl: float,
+    *,
+    created_at=None,
+    closed_at=None,
+    entry_price: float = 0.0,
+    exit_price: float = 0.0,
+    stop_price: float = 0.0,
+    take_price: float = 0.0,
+    reason: str = "market",
+    rr: float = 0.0,
+):
     """Записываем информацию о закрытой сделке."""
     from datetime import datetime
+
     if closed_at is None:
         closed_at = datetime.utcnow()
+    if created_at is None:
+        created_at = closed_at
+
     try:
         with pg_conn() as conn, conn.cursor() as cur:
             cur.execute(
                 """
                 INSERT INTO public.closed_trades
-                       (symbol, position_side, volume, pnl, closed_at)
-                VALUES (%s, %s, %s, %s, %s)
+                       (symbol, position_side, volume, pnl,
+                        closed_at, created_at,
+                        entry_price, exit_price,
+                        stop_price, take_price,
+                        reason, rr)
+                VALUES (%s, %s, %s, %s,
+                        %s, %s,
+                        %s, %s,
+                        %s, %s,
+                        %s, %s)
                 """,
-                (symbol, side, volume, pnl, closed_at),
+                (
+                    symbol,
+                    side,
+                    volume,
+                    pnl,
+                    closed_at,
+                    created_at,
+                    entry_price,
+                    exit_price,
+                    stop_price,
+                    take_price,
+                    reason,
+                    rr,
+                ),
             )
     except Exception as e:
         log.error("pg_insert_closed_trade: %s", e)
@@ -188,7 +227,7 @@ def pg_get_closed_trades_for_month(year: int, month: int):
         with pg_conn() as conn, conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT closed_at, symbol, position_side, volume, pnl
+                SELECT closed_at, symbol, reason, pnl, rr
                   FROM public.closed_trades
                  WHERE closed_at >= %s AND closed_at < %s
                  ORDER BY closed_at

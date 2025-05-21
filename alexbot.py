@@ -163,6 +163,26 @@ class AlexBot:
         val= f"{price:.{dec}f}"
         return val.rstrip('0').rstrip('.') if '.' in val else val
 
+    def _calc_rr(
+        self,
+        side: str,
+        volume: float,
+        pnl: float,
+        entry_price: float,
+        stop_price: float,
+        take_price: float,
+    ) -> float:
+        """Calculate real RR for a closed trade."""
+        if (stop_price <= 0.0 and take_price <= 0.0) or stop_price <= 0.0:
+            return 1.0 if pnl >= 0 else -1.0
+
+        risk_amount = volume * abs(entry_price - stop_price)
+        if risk_amount <= 1e-12:
+            return 1.0 if pnl >= 0 else -1.0
+
+        rr = pnl / risk_amount
+        return round(rr, 1)
+
     def _hello(self):
         bal_main= self._usdt(self.client_a)
         msg= f"▶️  Бот запущен.\nОсновной аккаунт: {_fmt_float(bal_main)} USDT"
@@ -303,19 +323,22 @@ class AlexBot:
 
         trades = pg_get_closed_trades_for_month(year, month)
         if not trades:
-            # нет данных
             line2 = f"Данных за {month:02d}.{year} нет, отчёт не сформирован."
         else:
-            # есть сделки
             lines = []
             lines.append(f"📊 Отчёт за {month:02d}.{year}")
-            total=0.0
-            for closed_at, symbol, side, volume, pnl in trades:
+            total_pnl = 0.0
+            total_rr = 0.0
+            for closed_at, symbol, reason, pnl, rr in trades:
                 dt_str = closed_at.strftime("%d.%m %H:%M")
-                lines.append(f"{dt_str} - {symbol} - {side} - Volume: {_fmt_float(volume)} - PNL={_fmt_float(pnl)} usdt")
-                total+= float(pnl)
-            lines.append(f"Итоговый PNL: {_fmt_float(total)} usdt")
-            line2= "\n".join(lines)
+                lines.append(
+                    f"{dt_str} - {symbol} - {reason} - PNL={_fmt_float(pnl)} usdt - RR={rr:.1f}"
+                )
+                total_pnl += float(pnl)
+                total_rr += float(rr)
+            lines.append(f"Итоговый PNL: {_fmt_float(total_pnl)} usdt")
+            lines.append(f"Итоговый RR: {total_rr:.1f}")
+            line2 = "\n".join(lines)
 
         msg = line1 + "\n" + line2
         tg_m(msg)
@@ -425,7 +448,32 @@ class AlexBot:
                           f"({int(ratio)}%, {_fmt_float(old_amt)} --> 0) "
                           f"по цене {self._fmt_price(sym, fill_price)}, общий PNL: {_fmt_float(new_rpnl)}")
                     tg_a(txt)
-                    pg_insert_closed_trade(sym, side, old_amt, new_rpnl)
+
+                    stop_p = 0.0
+                    take_p = 0.0
+                    reason = "market"
+                    if otype in CHILD_TYPES:
+                        sp_val = float(o.get("sp", 0))
+                        if "STOP" in otype:
+                            stop_p = sp_val
+                            reason = "stop"
+                        else:
+                            take_p = sp_val
+                            reason = "take"
+
+                    rr_val = self._calc_rr(side, old_amt, new_rpnl, old_entry, stop_p, take_p)
+                    pg_insert_closed_trade(
+                        sym,
+                        side,
+                        old_amt,
+                        new_rpnl,
+                        entry_price=old_entry,
+                        exit_price=fill_price,
+                        stop_price=stop_p,
+                        take_price=take_p,
+                        reason=reason,
+                        rr=rr_val,
+                    )
                     pg_delete_position("positions", sym, side)
                 else:
                     txt= (f"{pos_color(side)} Trader: {sym} частичное закрытие позиции {side_name(side)} "
@@ -557,12 +605,15 @@ class AlexBot:
             lines.append(prefix)
         lines.append(f"📊 Отчёт за {month:02d}.{year}")
 
-        total = 0.0
-        for closed_at, symbol, side, volume, pnl in trades:
+        total_pnl = 0.0
+        total_rr = 0.0
+        for closed_at, symbol, reason, pnl, rr in trades:
             dt_str = closed_at.strftime("%d-%m %H:%M")
-            lines.append(f"{dt_str} - {symbol} - {_fmt_float(volume)} - {_fmt_float(pnl)}")
-            total += float(pnl)
-        lines.append(f"Итоговый PNL: {_fmt_float(total)}")
+            lines.append(f"{dt_str} - {symbol} - {reason} - {_fmt_float(pnl)} usdt - RR={rr:.1f}")
+            total_pnl += float(pnl)
+            total_rr += float(rr)
+        lines.append(f"Итоговый PNL: {_fmt_float(total_pnl)}")
+        lines.append(f"Итоговый RR: {total_rr:.1f}")
 
         send_fn("\n".join(lines))
 
