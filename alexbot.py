@@ -609,10 +609,10 @@ class AlexBot:
         total_rr = 0.0
         for closed_at, symbol, reason, pnl, rr in trades:
             dt_str = closed_at.strftime("%d-%m %H:%M")
-            lines.append(f"{dt_str} - {symbol} - {reason} - {_fmt_float(pnl)} usdt - RR={rr:.1f}")
+            lines.append(f"{dt_str} - {symbol} - {reason} - RR={rr:.1f}")
             total_pnl += float(pnl)
             total_rr += float(rr)
-        lines.append(f"Итоговый PNL: {_fmt_float(total_pnl)}")
+        #lines.append(f"Итоговый PNL: {_fmt_float(total_pnl)}")
         lines.append(f"Итоговый RR: {total_rr:.1f}")
 
         send_fn("\n".join(lines))
