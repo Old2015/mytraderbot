@@ -462,12 +462,6 @@ class AlexBot:
                 if ratio>100: ratio=100
 
                 if new_amt <= 1e-8:
-                    txt = (
-                        f"{pos_color(side)} Trader: {sym} position closed {side_name(side)} 100% "
-                        f"at {self._fmt_price(sym, fill_price)}, total PNL: {_fmt_float(new_rpnl)}"
-                    )
-                    tg_a(txt)
-
                     stop_p = 0.0
                     take_p = 0.0
                     reason = "market"
@@ -481,6 +475,14 @@ class AlexBot:
                             reason = "take"
 
                     rr_val = self._calc_rr(side, old_amt, new_rpnl, old_entry, stop_p, take_p)
+                    status = "WIN" if new_rpnl >= 0 else "LOSS"
+                    color = "\U0001F7E2" if new_rpnl >= 0 else "\U0001F534"  # green or red circle
+                    txt = (
+                        f"{pos_color(side)} Trader: {sym} position closed {side_name(side)} 100% "
+                        f"at {self._fmt_price(sym, fill_price)}, RR={abs(rr_val):.1f} {color}{status}"
+                    )
+                    tg_a(txt)
+
                     pg_insert_closed_trade(
                         sym,
                         side,
