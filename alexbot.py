@@ -483,6 +483,7 @@ class AlexBot:
                     pg_upsert_position("positions", sym, side, new_amt, old_entry, new_rpnl, "binance", False)
 
                 if self.mirror_enabled:
+                    tg_m(f"[Main] {txt}")
                     self._mirror_reduce(sym, side, fill_qty, fill_price, partial_pnl)
             else:
                 new_amt= old_amt+ fill_qty
@@ -504,6 +505,7 @@ class AlexBot:
                 pg_upsert_position("positions", sym, side, new_amt, fill_price, new_rpnl, "binance", False)
 
                 if self.mirror_enabled:
+                    tg_m(f"[Main] {txt}")
                     self._mirror_increase(sym, side, fill_qty, fill_price, reason_text(otype))
 
     def _mirror_reduce(self, sym:str, side:str, fill_qty:float, fill_price:float, partial_pnl:float):
@@ -527,6 +529,7 @@ class AlexBot:
             )
         except Exception as e:
             log.error("_mirror_reduce: %s", e)
+            tg_m(f"[Mirror]: ошибка закрытия позиции {sym} {side_name(side)}: {e}")
             return
         if new_m_amt<=1e-8:
             pg_delete_position("mirror_positions", sym, side)
@@ -556,6 +559,7 @@ class AlexBot:
             )
         except Exception as e:
             log.error("_mirror_increase: %s", e)
+            tg_m(f"[Mirror]: ошибка открытия позиции {sym} {side_name(side)}: {e}")
             return
         pg_upsert_position("mirror_positions", sym, side, new_m_amt, fill_price, old_m_rpnl, "mirror", False)
 
