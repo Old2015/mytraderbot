@@ -103,6 +103,9 @@ class AlexBot:
 
         self.lot_size_map = {}
         self.price_size_map= {}
+        # Track initial position sizes to report percentage based messages
+        self.base_sizes = {}
+        self.mirror_base_sizes = {}
         self._init_symbol_precisions()
 
         # Запуск WebSocket
@@ -215,6 +218,7 @@ class AlexBot:
                 prc= float(p["entryPrice"])
                 vol= abs(amt)
                 real_positions.add((sym, side))
+                self.base_sizes[(sym, side)] = vol
 
                 txt = (
                     f"{pos_color(side)} (restart) Trader: {sym} "
@@ -448,6 +452,7 @@ class AlexBot:
             # positions
             old_amt, old_entry, old_rpnl= pg_get_position("positions", sym, side) or (0.0,0.0,0.0)
             new_rpnl= old_rpnl + partial_pnl
+            base_amt = self.base_sizes.get((sym, side), old_amt if old_amt>1e-12 else fill_qty)
 
             if reduce_flag:
                 new_amt= old_amt- fill_qty
@@ -458,8 +463,7 @@ class AlexBot:
 
                 if new_amt <= 1e-8:
                     txt = (
-                        f"{pos_color(side)} Trader: {sym} full close {side_name(side)} "
-                        f"({int(ratio)}%, {_fmt_float(old_amt)} -> 0) "
+                        f"{pos_color(side)} Trader: {sym} position closed {side_name(side)} 100% "
                         f"at {self._fmt_price(sym, fill_price)}, total PNL: {_fmt_float(new_rpnl)}"
                     )
                     tg_a(txt)
@@ -490,10 +494,14 @@ class AlexBot:
                         rr=rr_val,
                     )
                     pg_delete_position("positions", sym, side)
+                    self.base_sizes.pop((sym, side), None)
                 else:
+                    new_pct = 0
+                    if base_amt > 1e-12:
+                        new_pct = (new_amt / base_amt) * 100
                     txt = (
-                        f"{pos_color(side)} Trader: {sym} partial close {side_name(side)} "
-                        f"({int(ratio)}%, {_fmt_float(old_amt)} -> {_fmt_float(new_amt)}) "
+                        f"{pos_color(side)} Trader: {sym} position reduced {side_name(side)} "
+                        f"(-{int(ratio)}%, position {int(new_pct)}%) "
                         f"at {self._fmt_price(sym, fill_price)}, current PNL: {_fmt_float(new_rpnl)}"
                     )
                     tg_a(txt)
@@ -510,15 +518,19 @@ class AlexBot:
                     if ratio>100: ratio=100
 
                 if old_amt < 1e-12:
+                    self.base_sizes[(sym, side)] = new_amt
                     txt = (
                         f"{pos_color(side)} Trader: {sym} position opened {side_name(side)} "
-                        f"{reason_text(otype)} for {self._fmt_qty(sym, fill_qty)} "
+                        f"{reason_text(otype)} 100% "
                         f"at {self._fmt_price(sym, fill_price)}"
                     )
                 else:
+                    new_pct = 0
+                    if base_amt > 1e-12:
+                        new_pct = (new_amt / base_amt) * 100
                     txt = (
                         f"{pos_color(side)} Trader: {sym} position increased {side_name(side)} "
-                        f"({int(ratio)}%, {_fmt_float(old_amt)} -> {_fmt_float(new_amt)}) "
+                        f"(+{int(ratio)}%, position {int(new_pct)}%) "
                         f"at {self._fmt_price(sym, fill_price)}"
                     )
 
@@ -534,6 +546,7 @@ class AlexBot:
         dec_qty= fill_qty*MIRROR_COEFFICIENT
         new_m_pnl= old_m_rpnl + partial_pnl*MIRROR_COEFFICIENT
         new_m_amt= old_m_amt- dec_qty
+        base_m_amt = self.mirror_base_sizes.get((sym, side), old_m_amt if old_m_amt>1e-12 else dec_qty)
 
         ratio=100
         if old_m_amt>1e-12:
@@ -554,17 +567,21 @@ class AlexBot:
             return
         if new_m_amt<=1e-8:
             pg_delete_position("mirror_positions", sym, side)
+            self.mirror_base_sizes.pop((sym, side), None)
             txt = (
                 f"[Mirror]: {pos_color(side)} Trader: {sym} full close {side_name(side)} "
-                f"({int(ratio)}%, {_fmt_float(old_m_amt)} -> 0.0) "
+                f"({int(ratio)}%, {_fmt_float(old_m_amt)} -> 0.0, position 0%) "
                 f"at {self._fmt_price(sym, fill_price)}, PNL: {_fmt_float(new_m_pnl)}"
             )
             tg_m(txt)
         else:
             pg_upsert_position("mirror_positions", sym, side, new_m_amt, old_m_entry, new_m_pnl, "mirror", False)
+            new_pct = 0
+            if base_m_amt > 1e-12:
+                new_pct = (new_m_amt / base_m_amt) * 100
             txt = (
                 f"[Mirror]: {pos_color(side)} Trader: {sym} partial close {side_name(side)} "
-                f"({int(ratio)}%, {_fmt_float(old_m_amt)} -> {_fmt_float(new_m_amt)}) "
+                f"({int(ratio)}%, {_fmt_float(old_m_amt)} -> {_fmt_float(new_m_amt)}, position {int(new_pct)}%) "
                 f"at {self._fmt_price(sym, fill_price)}, PNL: {_fmt_float(new_m_pnl)}"
             )
             tg_m(txt)
@@ -573,6 +590,7 @@ class AlexBot:
         old_m_amt, old_m_entry, old_m_rpnl= pg_get_position("mirror_positions", sym, side) or (0.0,0.0,0.0)
         inc_qty= fill_qty*MIRROR_COEFFICIENT
         new_m_amt= old_m_amt+ inc_qty
+        base_m_amt = self.mirror_base_sizes.get((sym, side), new_m_amt if old_m_amt<1e-12 else old_m_amt)
         side_binance= "BUY" if side=="LONG" else "SELL"
 
         try:
@@ -589,9 +607,10 @@ class AlexBot:
         pg_upsert_position("mirror_positions", sym, side, new_m_amt, fill_price, old_m_rpnl, "mirror", False)
 
         if old_m_amt < 1e-12:
+            self.mirror_base_sizes[(sym, side)] = new_m_amt
             txt = (
                 f"[Mirror]: {pos_color(side)} Trader: {sym} position opened {side_name(side)} "
-                f"{rtxt} for {self._fmt_qty(sym, inc_qty)} "
+                f"{rtxt} for {self._fmt_qty(sym, inc_qty)} (100%) "
                 f"at {self._fmt_price(sym, fill_price)}"
             )
             tg_m(txt)
@@ -600,9 +619,12 @@ class AlexBot:
             if old_m_amt>1e-12:
                 ratio= (inc_qty/old_m_amt)*100
                 if ratio>100: ratio=100
+            new_pct = 0
+            if base_m_amt > 1e-12:
+                new_pct = (new_m_amt / base_m_amt) * 100
             txt = (
                 f"[Mirror]: {pos_color(side)} Trader: {sym} position increased {side_name(side)} "
-                f"({int(ratio)}%, {_fmt_float(old_m_amt)} -> {_fmt_float(new_m_amt)}) "
+                f"({int(ratio)}%, {_fmt_float(old_m_amt)} -> {_fmt_float(new_m_amt)}, position {int(new_pct)}%) "
                 f"{rtxt} at {self._fmt_price(sym, fill_price)}"
             )
             tg_m(txt)
