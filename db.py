@@ -227,7 +227,13 @@ def pg_get_closed_trades_for_month(year: int, month: int):
         with pg_conn() as conn, conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT closed_at, symbol, reason, pnl, rr
+                SELECT closed_at,
+                       symbol,
+                       position_side,
+                       reason,
+                       volume,
+                       pnl,
+                       rr
                   FROM public.closed_trades
                  WHERE closed_at >= %s AND closed_at < %s
                  ORDER BY closed_at
