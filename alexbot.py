@@ -329,10 +329,10 @@ class AlexBot:
             lines.append(f"📊 Отчёт за {month:02d}.{year}")
             total_pnl = 0.0
             total_rr = 0.0
-            for closed_at, symbol, reason, pnl, rr in trades:
+            for closed_at, symbol, side, reason, volume, pnl, rr in trades:
                 dt_str = closed_at.strftime("%d.%m %H:%M")
                 lines.append(
-                    f"{dt_str} - {symbol} - {reason} - PNL={_fmt_float(pnl)} usdt - RR={rr:.1f}"
+                    f"{dt_str} - {symbol} - {side} - {reason} - {self._fmt_qty(symbol, volume)} - PNL={_fmt_float(pnl)} usdt - RR={rr:.1f}"
                 )
                 total_pnl += float(pnl)
                 total_rr += float(rr)
@@ -579,7 +579,7 @@ class AlexBot:
             tg_m(txt)
 
 
-    def _maybe_monthly_report(self, send_fn=tg_a, prefix: Optional[str] = None):
+    def _maybe_monthly_report(self, send_fn=tg_a, prefix: Optional[str] = None, *, detailed: bool = False):
 
         if not MONTHLY_REPORT_ENABLED:
             return
@@ -611,12 +611,19 @@ class AlexBot:
 
         total_pnl = 0.0
         total_rr = 0.0
-        for closed_at, symbol, reason, pnl, rr in trades:
+        for closed_at, symbol, side, reason, volume, pnl, rr in trades:
             dt_str = closed_at.strftime("%d-%m %H:%M")
-            lines.append(f"{dt_str} - {symbol} - {reason} - RR={rr:.1f}")
+            if detailed:
+                lines.append(
+                    f"{dt_str} - {symbol} - {side} - {reason} - {self._fmt_qty(symbol, volume)} - PNL={_fmt_float(pnl)} usdt - RR={rr:.1f}"
+                )
+            else:
+                lines.append(
+                    f"{dt_str} - {symbol} - {side} - {reason} - RR={rr:.1f}"
+                )
             total_pnl += float(pnl)
             total_rr += float(rr)
-        #lines.append(f"Итоговый PNL: {_fmt_float(total_pnl)}")
+        # lines.append(f"Итоговый PNL: {_fmt_float(total_pnl)}")
         lines.append(f"Итоговый RR: {total_rr:.1f}")
 
         send_fn("\n".join(lines))
@@ -637,7 +644,7 @@ class AlexBot:
             log.info("[Main] bot running ... Ctrl+C to stop")
 
             # Check monthly report on startup for mirror chat
-            self._maybe_monthly_report(send_fn=tg_m, prefix="Вывод в зеркальный чат")
+            self._maybe_monthly_report(send_fn=tg_m, prefix="Вывод в зеркальный чат", detailed=True)
             self._maybe_purge_events()
 
             while True:
