@@ -3,6 +3,12 @@ import logging
 from datetime import datetime, date, timedelta
 from typing import Dict, Any
 
+# ------------------------------------------------------------
+# Основной модуль торгового бота. Здесь реализована логика
+# синхронизации позиций, обработка событий от Binance и
+# вспомогательные функции.
+# ------------------------------------------------------------
+
 from binance.client import Client
 from binance import ThreadedWebsocketManager
 
@@ -31,20 +37,22 @@ CHILD_TYPES = {
     "TAKE_PROFIT","TAKE_PROFIT_LIMIT","TAKE_PROFIT_MARKET"
 }
 
+# Эти типы ордеров считаются дочерними (стопы/тейки)
+
 def pos_color(side: str) -> str:
-    """Return a green or red dot depending on LONG/SHORT."""
+    """Вернуть зелёный или красный кружок в зависимости от LONG/SHORT."""
     return "🟢" if side=="LONG" else "🔴"
 
 def child_color() -> str:
-    """Blue circle for STOP/TAKE messages."""
+    """Синий кружок для сообщений о стопах/тейках."""
     return "🔵"
 
 def side_name(side: str) -> str:
-    """Return ``LONG`` or ``SHORT`` for the given side."""
+    """Возвращает строку ``LONG`` или ``SHORT`` в зависимости от стороны."""
     return "LONG" if side == "LONG" else "SHORT"
 
 def reason_text(otype:str)->str:
-    """(MARKET), (LIMIT), (STOP), ..."""
+    """Возвращает человекочитаемое название типа ордера."""
     mp = {
         "MARKET":"(MARKET)",
         "LIMIT":"(LIMIT)",
@@ -56,12 +64,12 @@ def reason_text(otype:str)->str:
     return mp.get(otype, f"({otype})")
 
 def _fmt_float(x: float, digits: int = 4) -> str:
-    """Format a float with the specified precision and trim trailing zeros."""
+    """Форматируем число с плавающей точкой и обрезаем лишние нули."""
     s= f"{x:.{digits}f}"
     return s.rstrip('0').rstrip('.') if '.' in s else s
 
 def decode_side_ws(o: Dict[str,Any]) -> str:
-    """ORDER_TRADE_UPDATE: if R + S=BUY => SHORT, etc."""
+    """Определяем сторону позиции на основе сообщения WS."""
     reduce_flag= bool(o.get("R",False))
     raw_side  = o["S"]  # "BUY"/"SELL"
     if reduce_flag:
@@ -70,20 +78,20 @@ def decode_side_ws(o: Dict[str,Any]) -> str:
         return "LONG" if raw_side=="BUY" else "SHORT"
 
 def decode_side_openorders(raw_side: str, reduce_f: bool, closepos: bool) -> str:
-    """Helper for ``_sync_start``.
-    If ``reduceOnly`` or ``closePosition`` then BUY=>SHORT, SELL=>LONG,
-    otherwise BUY=>LONG, SELL=>SHORT.
-    """
+    """Помощник для ``_sync_start`` при разборе открытых ордеров.
+    Если выставлен ``reduceOnly`` или ``closePosition`` — направление
+    трактуется противоположно (BUY => SHORT)."""
     if reduce_f or closepos:
         return "SHORT" if raw_side=="BUY" else "LONG"
     else:
         return "LONG" if raw_side=="BUY" else "SHORT"
 
 class AlexBot:
-    """Trading bot that keeps real volumes in ``positions`` and limit/stop
-    orders in ``orders``. On startup ``_sync_start`` removes stale records and
-    the bot processes NEW/FILLED/CANCELED events from the websocket.
-    """
+    """Торговый бот.
+    Хранит текущие объёмы в таблице ``positions`` и лимитные/стоп‑ордера в
+    таблице ``orders``. При старте выполняется ``_sync_start``, который очищает
+    устаревшие записи, после чего бот обрабатывает события NEW/FILLED/CANCELED
+    из WebSocket."""
 
     def __init__(self):
         log.debug("AlexBot.__init__ called")
@@ -101,9 +109,10 @@ class AlexBot:
             if self.mirror_enabled else None
         )
 
+        # Словари с точностями для каждого символа
         self.lot_size_map = {}
-        self.price_size_map= {}
-        # Track initial position sizes to report percentage based messages
+        self.price_size_map = {}
+        # Храним исходные размеры позиций для вычисления процентов
         self.base_sizes = {}
         self.mirror_base_sizes = {}
         self._init_symbol_precisions()
@@ -116,7 +125,7 @@ class AlexBot:
         self.ws.start()
         self.ws.start_futures_user_socket(callback=self._ws_handler)
 
-        # Сброс
+        # Сброс состояния баз в начале работы
         wipe_mirror()
         reset_pending()
         self._sync_start()
@@ -131,7 +140,8 @@ class AlexBot:
     def _init_symbol_precisions(self):
         log.debug("_init_symbol_precisions called")
         try:
-            info= self.client_a.futures_exchange_info()
+            # Запрашиваем информацию о бирже, чтобы узнать точности торгов
+            info = self.client_a.futures_exchange_info()
             for s in info["symbols"]:
                 sym_name= s["symbol"]
                 lot_dec, price_dec=4,4
@@ -148,19 +158,22 @@ class AlexBot:
 
     @staticmethod
     def _step_to_decimals(step_str:str)->int:
-        s= step_str.rstrip('0')
+        # Превращаем шаг цены/объёма вида "0.001" в количество знаков после запятой
+        s = step_str.rstrip('0')
         if '.' not in s:
             return 0
         return len(s.split('.')[1])
 
     def _fmt_qty(self, sym:str, qty:float)->str:
-        dec= self.lot_size_map.get(sym,4)
-        val= f"{qty:.{dec}f}"
+        # Форматирование количества с учётом точности символа
+        dec = self.lot_size_map.get(sym, 4)
+        val = f"{qty:.{dec}f}"
         return val.rstrip('0').rstrip('.') if '.' in val else val
 
     def _fmt_price(self, sym:str, price:float)->str:
-        dec= self.price_size_map.get(sym,4)
-        val= f"{price:.{dec}f}"
+        # Форматирование цены с учётом требуемой точности
+        dec = self.price_size_map.get(sym, 4)
+        val = f"{price:.{dec}f}"
         return val.rstrip('0').rstrip('.') if '.' in val else val
 
     def _calc_rr(
@@ -172,7 +185,7 @@ class AlexBot:
         stop_price: float,
         take_price: float,
     ) -> float:
-        """Calculate real RR for a closed trade."""
+        """Рассчитываем фактическое соотношение риск/прибыль."""
         if (stop_price <= 0.0 and take_price <= 0.0) or stop_price <= 0.0:
             return 1.0 if pnl >= 0 else -1.0
 
@@ -184,6 +197,7 @@ class AlexBot:
         return round(rr, 1)
 
     def _hello(self):
+        # Отправляем приветственное сообщение в Telegram
         bal_main = self._usdt(self.client_a)
         msg = f"▶️  Bot started.\nMain account: {_fmt_float(bal_main)} USDT"
         if self.mirror_enabled:
@@ -193,24 +207,26 @@ class AlexBot:
         tg_m(msg)
 
     def _usdt(self, cl: Client)->float:
+        """Получаем текущий баланс USDT для заданного клиента."""
         try:
-            bals= cl.futures_account_balance()
+            bals = cl.futures_account_balance()
             for b in bals:
-                if b["asset"]=="USDT":
+                if b["asset"] == "USDT":
                     return float(b["balance"])
         except Exception as e:
             log.error("_usdt: %s", e)
         return 0.0
 
     def _sync_start(self):
-        """Scan current positions and orders, removing any stale records."""
+        """Синхронизация состояния при старте бота."""
         log.debug("_sync_start called")
         try:
-            # 1) Позиции
+            # --- 1) Позиции ---
             pos_info= self.client_a.futures_position_information()
             real_positions= set()
             for p in pos_info:
-                amt= float(p["positionAmt"])
+                # Размер открытой позиции
+                amt = float(p["positionAmt"])
                 if abs(amt)<1e-12:
                     continue
                 sym= p["symbol"]
@@ -228,7 +244,7 @@ class AlexBot:
                 tg_m(txt)
                 pg_upsert_position("positions", sym, side, vol, prc, 0.0, "binance", False)
 
-            # 2) Ордера
+            # --- 2) Ордера ---
             all_orders= self.client_a.futures_get_open_orders()
             real_orders= set()
 
@@ -285,7 +301,7 @@ class AlexBot:
 
                 tg_m(txt)
 
-            # 3) Удаляем лишнее
+            # --- 3) Удаляем лишнее из БД ---
             with pg_conn() as conn, conn.cursor() as cur:
                 # positions
                 cur.execute("SELECT symbol, position_side FROM public.positions WHERE exchange='binance'")
@@ -314,6 +330,7 @@ class AlexBot:
         1) Post whether the monthly report for the main chat is enabled.
         2) Post the report for the previous month (or a "no data" message) to the mirror chat.
         """
+        # --- информация о настройках и отчёт за прошлый месяц ---
         # 1) Report enabled?
         if MONTHLY_REPORT_ENABLED:
             line1 = "Monthly report to the main group on the first: ENABLED"
@@ -362,25 +379,27 @@ class AlexBot:
             self._on_order(msg["o"])
 
     def _on_order(self, o:Dict[str,Any]):
+        """Обработка события ордера из WebSocket."""
         sym     = o["s"]
         otype   = o["ot"]   # e.g. "LIMIT","MARKET"
         status  = o["X"]    # "NEW","CANCELED","FILLED"
-        fill_price= float(o.get("ap",0))
-        fill_qty  = float(o.get("l",0))
-        reduce_flag= bool(o.get("R",False))
-        partial_pnl= float(o.get("rp",0.0))
-        order_id= int(o.get("i",0))
+        fill_price = float(o.get("ap", 0))  # цена исполнения
+        fill_qty = float(o.get("l", 0))     # исполненный объём
+        reduce_flag = bool(o.get("R", False))
+        partial_pnl = float(o.get("rp", 0.0))  # PNL части ордера
+        order_id = int(o.get("i", 0))
 
-        side= decode_side_ws(o)  # LONG/SHORT
+        # Определяем сторону позиции (LONG/SHORT)
+        side = decode_side_ws(o)
 
-        # Если "NEW", проверим, действительно ли этот ордер есть в openOrders
+        # Если статус NEW, проверим, действительно ли этот ордер есть в openOrders
         if status=="NEW":
             # Это ключевой фикс: чтобы исключить фантом "Новый LIMIT ... price=0"
             # Делаем API-запрос open_orders по symbol
             try:
-                open_list= self.client_a.futures_get_open_orders(symbol=sym)
-                # Ищем orderId=order_id
-                found= any( (int(x["orderId"])==order_id) for x in open_list )
+                open_list = self.client_a.futures_get_open_orders(symbol=sym)
+                # Проверяем, присутствует ли orderId в списке открытых ордеров
+                found = any(int(x["orderId"]) == order_id for x in open_list)
                 if not found:
                     # Это фантом
                     log.info("SKIP phantom 'NEW' order => not in openOrders: sym=%s, side=%s, orderId=%d, type=%s", 
@@ -389,7 +408,7 @@ class AlexBot:
             except Exception as ee:
                 log.error("Failed to check openOrders for %s: %s", sym, ee)
 
-        if status=="CANCELED":
+        if status == "CANCELED":
             pg_delete_order(sym, side, order_id)
             pr= float(o.get("p",0))
             q= float(o.get("q",0))
@@ -401,7 +420,7 @@ class AlexBot:
             tg_a(txt)
             return
 
-        elif status=="NEW":
+        elif status == "NEW":
             # значит это реально существующий (найден в openOrders)
             from db import pg_upsert_order
             orig_qty= float(o.get("q",0))
@@ -633,7 +652,7 @@ class AlexBot:
 
 
     def _maybe_monthly_report(self, send_fn=tg_a, prefix: Optional[str] = None, *, detailed: bool = False):
-
+        """Отправка ежемесячного отчёта, если пришёл первый день месяца."""
         if not MONTHLY_REPORT_ENABLED:
             return
         today = datetime.utcnow().date()
@@ -684,7 +703,7 @@ class AlexBot:
         self.last_report_month = cur_month
 
     def _maybe_purge_events(self):
-        """Purge old futures_events records once per day."""
+        """Удаляем старые записи из таблицы событий раз в сутки."""
         today = datetime.utcnow().date()
         if self._last_purge_date == today:
             return
@@ -700,6 +719,7 @@ class AlexBot:
             self._maybe_monthly_report(send_fn=tg_m, prefix="Mirror chat output", detailed=True)
             self._maybe_purge_events()
 
+            # Основной цикл бота
             while True:
                 self._maybe_monthly_report()
                 self._maybe_purge_events()
