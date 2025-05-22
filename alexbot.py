@@ -31,17 +31,17 @@ CHILD_TYPES = {
     "TAKE_PROFIT","TAKE_PROFIT_LIMIT","TAKE_PROFIT_MARKET"
 }
 
-def pos_color(side: str)->str:
-    """🔵 или 🔴, в зависимости от LONG/SHORT."""
+def pos_color(side: str) -> str:
+    """Return a green or red dot depending on LONG/SHORT."""
     return "🟢" if side=="LONG" else "🔴"
 
-def child_color()->str:
-    """Синий кружок для STOP/TAKE."""
+def child_color() -> str:
+    """Blue circle for STOP/TAKE messages."""
     return "🔵"
 
-def side_name(side:str)->str:
-    """'ЛОНГ' / 'ШОРТ'."""
-    return "ЛОНГ" if side=="LONG" else "ШОРТ"
+def side_name(side: str) -> str:
+    """Return ``LONG`` or ``SHORT`` for the given side."""
+    return "LONG" if side == "LONG" else "SHORT"
 
 def reason_text(otype:str)->str:
     """(MARKET), (LIMIT), (STOP), ..."""
@@ -55,8 +55,8 @@ def reason_text(otype:str)->str:
     }
     return mp.get(otype, f"({otype})")
 
-def _fmt_float(x: float, digits:int=4)->str:
-    """Формат числа с digits знаками, убирая хвосты."""
+def _fmt_float(x: float, digits: int = 4) -> str:
+    """Format a float with the specified precision and trim trailing zeros."""
     s= f"{x:.{digits}f}"
     return s.rstrip('0').rstrip('.') if '.' in s else s
 
@@ -69,10 +69,10 @@ def decode_side_ws(o: Dict[str,Any]) -> str:
     else:
         return "LONG" if raw_side=="BUY" else "SHORT"
 
-def decode_side_openorders(raw_side:str, reduce_f:bool, closepos:bool)->str:
-    """
-    Для _sync_start(open_orders).
-    if reduceOnly or closePosition => BUY=>SHORT, SELL=>LONG, иначе BUY=>LONG, SELL=>SHORT.
+def decode_side_openorders(raw_side: str, reduce_f: bool, closepos: bool) -> str:
+    """Helper for ``_sync_start``.
+    If ``reduceOnly`` or ``closePosition`` then BUY=>SHORT, SELL=>LONG,
+    otherwise BUY=>LONG, SELL=>SHORT.
     """
     if reduce_f or closepos:
         return "SHORT" if raw_side=="BUY" else "LONG"
@@ -80,12 +80,9 @@ def decode_side_openorders(raw_side:str, reduce_f:bool, closepos:bool)->str:
         return "LONG" if raw_side=="BUY" else "SHORT"
 
 class AlexBot:
-    """
-    Бот, где:
-     - positions хранит реальные объёмы
-     - orders хранит лимит/стоп
-    При старте => _sync_start => всё лишнее удаляем
-    При WS => NEW/FILLED/CANCELED => обрабатываем.
+    """Trading bot that keeps real volumes in ``positions`` and limit/stop
+    orders in ``orders``. On startup ``_sync_start`` removes stale records and
+    the bot processes NEW/FILLED/CANCELED events from the websocket.
     """
 
     def __init__(self):
@@ -124,8 +121,8 @@ class AlexBot:
 
         self.last_report_month = None
         self._last_purge_date = None
-        # NEW: Выводим "разрешен ли отчёт" + отчёт за прошлый месяц СРАЗУ
-        self._monthly_info_at_start()   # <-- вызываем метод
+        # NEW: immediately show whether the report is enabled and send last month's report
+        self._monthly_info_at_start()   # <-- call helper
 
     # ---------- точность ----------
     def _init_symbol_precisions(self):
@@ -184,11 +181,11 @@ class AlexBot:
         return round(rr, 1)
 
     def _hello(self):
-        bal_main= self._usdt(self.client_a)
-        msg= f"▶️  Бот запущен.\nОсновной аккаунт: {_fmt_float(bal_main)} USDT"
+        bal_main = self._usdt(self.client_a)
+        msg = f"▶️  Bot started.\nMain account: {_fmt_float(bal_main)} USDT"
         if self.mirror_enabled:
-            bal_m= self._usdt(self.client_b)
-            msg += f"\nЗеркальный аккаунт активен: {_fmt_float(bal_m)} USDT"
+            bal_m = self._usdt(self.client_b)
+            msg += f"\nMirror account active: {_fmt_float(bal_m)} USDT"
         log.info(msg)
         tg_m(msg)
 
@@ -203,7 +200,7 @@ class AlexBot:
         return 0.0
 
     def _sync_start(self):
-        """Сканируем позиции, ордера, удаляем лишнее."""
+        """Scan current positions and orders, removing any stale records."""
         log.debug("_sync_start called")
         try:
             # 1) Позиции
@@ -219,9 +216,11 @@ class AlexBot:
                 vol= abs(amt)
                 real_positions.add((sym, side))
 
-                txt= (f"{pos_color(side)} (restart) Trader: {sym} "
-                      f"Открыта {side_name(side)}, Объём={self._fmt_qty(sym, vol)}, "
-                      f"Цена={self._fmt_price(sym, prc)}")
+                txt = (
+                    f"{pos_color(side)} (restart) Trader: {sym} "
+                    f"{side_name(side)} position opened, Volume={self._fmt_qty(sym, vol)}, "
+                    f"Price={self._fmt_price(sym, prc)}"
+                )
                 tg_m(txt)
                 pg_upsert_position("positions", sym, side, vol, prc, 0.0, "binance", False)
 
@@ -260,19 +259,25 @@ class AlexBot:
                 pg_upsert_order(sym, side, oid, orig_qty, main_price, "NEW")
                 real_orders.add((sym, side, oid))
 
-                # Вывод
+                # Output
                 if otype in CHILD_TYPES:
                     # STOP/TAKE
-                    kind= "STOP" if "STOP" in otype else "TAKE"
-                    txt= (f"{child_color()} (restart) Trader: {sym} {side_name(side)} "
-                          f"{kind} установлен на цену {self._fmt_price(sym, main_price)}")
+                    kind = "STOP" if "STOP" in otype else "TAKE"
+                    txt = (
+                        f"{child_color()} (restart) Trader: {sym} {side_name(side)} "
+                        f"{kind} set at {self._fmt_price(sym, main_price)}"
+                    )
                 elif is_limitlike:
-                    txt= (f"{pos_color(side)} (restart) Trader: {sym} {side_name(side)} LIMIT, "
-                          f"Объём: {self._fmt_qty(sym, orig_qty)} по цене {self._fmt_price(sym, main_price)}")
+                    txt = (
+                        f"{pos_color(side)} (restart) Trader: {sym} {side_name(side)} LIMIT, "
+                        f"Volume: {self._fmt_qty(sym, orig_qty)} at {self._fmt_price(sym, main_price)}"
+                    )
                 else:
                     # fallback
-                    txt= (f"{pos_color(side)} (restart) Trader: {sym} {side_name(side)} {otype}, "
-                          f"qty={orig_qty}, price={main_price}")
+                    txt = (
+                        f"{pos_color(side)} (restart) Trader: {sym} {side_name(side)} {otype}, "
+                        f"qty={orig_qty}, price={main_price}"
+                    )
 
                 tg_m(txt)
 
@@ -299,20 +304,20 @@ class AlexBot:
             log.error("_sync_start: %s", e)
 
 
-    # NEW: метод, вызываемый при старте для вывода инфы в зеркальный чат
+    # NEW: method called on startup to post info to the mirror chat
     def _monthly_info_at_start(self):
         """
-        1) Пишем: "Отчёт в основную группу каждого 1го числа: [да/нет]" 
-        2) Пишем отчёт за ПРЕДЫДУЩИЙ месяц (или "нет данных"), всё в tg_m.
+        1) Post whether the monthly report for the main chat is enabled.
+        2) Post the report for the previous month (or a "no data" message) to the mirror chat.
         """
-        # 1) Разрешен ли вывод
+        # 1) Report enabled?
         if MONTHLY_REPORT_ENABLED:
-            line1 = "Отчёт в основную группу первого числа: ВКЛЮЧЕН"
+            line1 = "Monthly report to the main group on the first: ENABLED"
         else:
-            line1 = "Отчёт в основную группу первого числа: ОТКЛЮЧЕН"
+            line1 = "Monthly report to the main group on the first: DISABLED"
 
-        # 2) Отчёт за прошлый месяц
-        # Определяем предыдущий месяц
+        # 2) Report for the previous month
+        # Determine previous month
         today = date.today()
         if today.month == 1:
             year = today.year - 1
@@ -323,10 +328,10 @@ class AlexBot:
 
         trades = pg_get_closed_trades_for_month(year, month)
         if not trades:
-            line2 = f"Данных за {month:02d}.{year} нет, отчёт не сформирован."
+            line2 = f"No data for {month:02d}.{year}, report not generated."
         else:
             lines = []
-            lines.append(f"📊 Отчёт за {month:02d}.{year}")
+            lines.append(f"📊 Report for {month:02d}.{year}")
             total_pnl = 0.0
             total_rr = 0.0
             for closed_at, symbol, side, reason, volume, pnl, rr in trades:
@@ -336,8 +341,8 @@ class AlexBot:
                 )
                 total_pnl += float(pnl)
                 total_rr += float(rr)
-            lines.append(f"Итоговый PNL: {_fmt_float(total_pnl)} usdt")
-            lines.append(f"Итоговый RR: {total_rr:.1f}")
+            lines.append(f"Total PNL: {_fmt_float(total_pnl)} usdt")
+            lines.append(f"Total RR: {total_rr:.1f}")
             line2 = "\n".join(lines)
 
         msg = line1 + "\n" + line2
@@ -384,9 +389,11 @@ class AlexBot:
             pg_delete_order(sym, side, order_id)
             pr= float(o.get("p",0))
             q= float(o.get("q",0))
-            txt= (f"🔵 Trader: {sym} {otype} отменён. "
-                  f"(Был {pos_color(side)} {side_name(side)}, Объём: {self._fmt_qty(sym, q)} "
-                  f"по цене {self._fmt_price(sym, pr)})")
+            txt = (
+                f"🔵 Trader: {sym} {otype} canceled. "
+                f"(Was {pos_color(side)} {side_name(side)}, Volume: {self._fmt_qty(sym, q)} "
+                f"at {self._fmt_price(sym, pr)})"
+            )
             tg_a(txt)
             return
 
@@ -406,15 +413,19 @@ class AlexBot:
                     return
 
             if otype in CHILD_TYPES:
-                price= stp if stp>1e-12 else lmt
+                price = stp if stp > 1e-12 else lmt
                 pg_upsert_order(sym, side, order_id, orig_qty, price, "NEW")
-                kind= "STOP" if "STOP" in otype else "TAKE"
-                txt= (f"🔵 Trader: {sym} {kind} установлен на цену {self._fmt_price(sym, price)}")
+                kind = "STOP" if "STOP" in otype else "TAKE"
+                txt = (
+                    f"🔵 Trader: {sym} {kind} set at {self._fmt_price(sym, price)}"
+                )
                 tg_a(txt)
             else:
                 pg_upsert_order(sym, side, order_id, orig_qty, lmt, "NEW")
-                txt= (f"🔵 Trader: {sym} Новый LIMIT {pos_color(side)} {side_name(side)}. "
-                      f"Объём: {self._fmt_qty(sym, orig_qty)} по цене {self._fmt_price(sym, lmt)}.")
+                txt = (
+                    f"🔵 Trader: {sym} New LIMIT {pos_color(side)} {side_name(side)}. "
+                    f"Volume: {self._fmt_qty(sym, orig_qty)} at {self._fmt_price(sym, lmt)}."
+                )
                 tg_a(txt)
 
         elif status=="FILLED":
@@ -426,10 +437,12 @@ class AlexBot:
                 return
 
             if otype in CHILD_TYPES:
-                s_p= float(o.get("sp",0))
-                k= "STOP" if "STOP" in otype else "TAKE"
-                txt= (f"🔵 Trader: {sym} {k} активирован по цене {self._fmt_price(sym, s_p)} "
-                      f"(факт. исполнение {self._fmt_price(sym, fill_price)})")
+                s_p = float(o.get("sp", 0))
+                k = "STOP" if "STOP" in otype else "TAKE"
+                txt = (
+                    f"🔵 Trader: {sym} {k} triggered at {self._fmt_price(sym, s_p)} "
+                    f"(actual execution {self._fmt_price(sym, fill_price)})"
+                )
                 tg_a(txt)
 
             # positions
@@ -443,10 +456,12 @@ class AlexBot:
                     ratio= (fill_qty/old_amt)*100
                 if ratio>100: ratio=100
 
-                if new_amt<=1e-8:
-                    txt= (f"{pos_color(side)} Trader: {sym} полное закрытие позиции {side_name(side)} "
-                          f"({int(ratio)}%, {_fmt_float(old_amt)} --> 0) "
-                          f"по цене {self._fmt_price(sym, fill_price)}, общий PNL: {_fmt_float(new_rpnl)}")
+                if new_amt <= 1e-8:
+                    txt = (
+                        f"{pos_color(side)} Trader: {sym} full close {side_name(side)} "
+                        f"({int(ratio)}%, {_fmt_float(old_amt)} -> 0) "
+                        f"at {self._fmt_price(sym, fill_price)}, total PNL: {_fmt_float(new_rpnl)}"
+                    )
                     tg_a(txt)
 
                     stop_p = 0.0
@@ -476,9 +491,11 @@ class AlexBot:
                     )
                     pg_delete_position("positions", sym, side)
                 else:
-                    txt= (f"{pos_color(side)} Trader: {sym} частичное закрытие позиции {side_name(side)} "
-                          f"({int(ratio)}%, {_fmt_float(old_amt)} --> {_fmt_float(new_amt)}) "
-                          f"по цене {self._fmt_price(sym, fill_price)}, текущий PNL: {_fmt_float(new_rpnl)}")
+                    txt = (
+                        f"{pos_color(side)} Trader: {sym} partial close {side_name(side)} "
+                        f"({int(ratio)}%, {_fmt_float(old_amt)} -> {_fmt_float(new_amt)}) "
+                        f"at {self._fmt_price(sym, fill_price)}, current PNL: {_fmt_float(new_rpnl)}"
+                    )
                     tg_a(txt)
                     pg_upsert_position("positions", sym, side, new_amt, old_entry, new_rpnl, "binance", False)
 
@@ -492,14 +509,18 @@ class AlexBot:
                     ratio= (fill_qty/old_amt)*100
                     if ratio>100: ratio=100
 
-                if old_amt<1e-12:
-                    txt= (f"{pos_color(side)} Trader: {sym} Открыта позиция {side_name(side)} "
-                          f"{reason_text(otype)} на {self._fmt_qty(sym, fill_qty)} "
-                          f"по цене {self._fmt_price(sym, fill_price)}")
+                if old_amt < 1e-12:
+                    txt = (
+                        f"{pos_color(side)} Trader: {sym} position opened {side_name(side)} "
+                        f"{reason_text(otype)} for {self._fmt_qty(sym, fill_qty)} "
+                        f"at {self._fmt_price(sym, fill_price)}"
+                    )
                 else:
-                    txt= (f"{pos_color(side)} Trader: {sym} Увеличение позиции {side_name(side)} "
-                          f"({int(ratio)}%, {_fmt_float(old_amt)} --> {_fmt_float(new_amt)}) "
-                          f"по цене {self._fmt_price(sym, fill_price)}")
+                    txt = (
+                        f"{pos_color(side)} Trader: {sym} position increased {side_name(side)} "
+                        f"({int(ratio)}%, {_fmt_float(old_amt)} -> {_fmt_float(new_amt)}) "
+                        f"at {self._fmt_price(sym, fill_price)}"
+                    )
 
                 tg_a(txt)
                 pg_upsert_position("positions", sym, side, new_amt, fill_price, new_rpnl, "binance", False)
@@ -529,19 +550,23 @@ class AlexBot:
             )
         except Exception as e:
             log.error("_mirror_reduce: %s", e)
-            tg_m(f"[Mirror]: ошибка закрытия позиции {sym} {side_name(side)}: {e}")
+            tg_m(f"[Mirror]: failed to close position {sym} {side_name(side)}: {e}")
             return
         if new_m_amt<=1e-8:
             pg_delete_position("mirror_positions", sym, side)
-            txt= (f"[Mirror]: {pos_color(side)} Trader: {sym} полное закрытие позиции {side_name(side)} "
-                  f"({int(ratio)}%, {_fmt_float(old_m_amt)} --> 0.0) "
-                  f"по цене {self._fmt_price(sym, fill_price)}, PNL: {_fmt_float(new_m_pnl)}")
+            txt = (
+                f"[Mirror]: {pos_color(side)} Trader: {sym} full close {side_name(side)} "
+                f"({int(ratio)}%, {_fmt_float(old_m_amt)} -> 0.0) "
+                f"at {self._fmt_price(sym, fill_price)}, PNL: {_fmt_float(new_m_pnl)}"
+            )
             tg_m(txt)
         else:
             pg_upsert_position("mirror_positions", sym, side, new_m_amt, old_m_entry, new_m_pnl, "mirror", False)
-            txt= (f"[Mirror]: {pos_color(side)} Trader: {sym} частичное закрытие позиции {side_name(side)} "
-                  f"({int(ratio)}%, {_fmt_float(old_m_amt)} --> {_fmt_float(new_m_amt)}) "
-                  f"по цене {self._fmt_price(sym, fill_price)}, PNL: {_fmt_float(new_m_pnl)}")
+            txt = (
+                f"[Mirror]: {pos_color(side)} Trader: {sym} partial close {side_name(side)} "
+                f"({int(ratio)}%, {_fmt_float(old_m_amt)} -> {_fmt_float(new_m_amt)}) "
+                f"at {self._fmt_price(sym, fill_price)}, PNL: {_fmt_float(new_m_pnl)}"
+            )
             tg_m(txt)
 
     def _mirror_increase(self, sym:str, side:str, fill_qty:float, fill_price:float, rtxt:str):
@@ -559,23 +584,27 @@ class AlexBot:
             )
         except Exception as e:
             log.error("_mirror_increase: %s", e)
-            tg_m(f"[Mirror]: ошибка открытия позиции {sym} {side_name(side)}: {e}")
+            tg_m(f"[Mirror]: failed to open position {sym} {side_name(side)}: {e}")
             return
         pg_upsert_position("mirror_positions", sym, side, new_m_amt, fill_price, old_m_rpnl, "mirror", False)
 
-        if old_m_amt<1e-12:
-            txt= (f"[Mirror]: {pos_color(side)} Trader: {sym} Открыта позиция {side_name(side)} "
-                  f"{rtxt} на {self._fmt_qty(sym, inc_qty)} "
-                  f"по цене {self._fmt_price(sym, fill_price)}")
+        if old_m_amt < 1e-12:
+            txt = (
+                f"[Mirror]: {pos_color(side)} Trader: {sym} position opened {side_name(side)} "
+                f"{rtxt} for {self._fmt_qty(sym, inc_qty)} "
+                f"at {self._fmt_price(sym, fill_price)}"
+            )
             tg_m(txt)
         else:
             ratio=100
             if old_m_amt>1e-12:
                 ratio= (inc_qty/old_m_amt)*100
                 if ratio>100: ratio=100
-            txt= (f"[Mirror]: {pos_color(side)} Trader: {sym} Увеличение позиции {side_name(side)} "
-                  f"({int(ratio)}%, {_fmt_float(old_m_amt)} --> {_fmt_float(new_m_amt)}) "
-                  f"{rtxt} по цене {self._fmt_price(sym, fill_price)}")
+            txt = (
+                f"[Mirror]: {pos_color(side)} Trader: {sym} position increased {side_name(side)} "
+                f"({int(ratio)}%, {_fmt_float(old_m_amt)} -> {_fmt_float(new_m_amt)}) "
+                f"{rtxt} at {self._fmt_price(sym, fill_price)}"
+            )
             tg_m(txt)
 
 
@@ -590,7 +619,7 @@ class AlexBot:
         if self.last_report_month == cur_month:
             return
 
-        # предыдущий месяц
+        # previous month
         if today.month == 1:
             year = today.year - 1
             month = 12
@@ -607,7 +636,7 @@ class AlexBot:
         lines = []
         if prefix:
             lines.append(prefix)
-        lines.append(f"📊 Отчёт за {month:02d}.{year}")
+        lines.append(f"📊 Report for {month:02d}.{year}")
 
         total_pnl = 0.0
         total_rr = 0.0
@@ -623,8 +652,8 @@ class AlexBot:
                 )
             total_pnl += float(pnl)
             total_rr += float(rr)
-        # lines.append(f"Итоговый PNL: {_fmt_float(total_pnl)}")
-        lines.append(f"Итоговый RR: {total_rr:.1f}")
+        # lines.append(f"Total PNL: {_fmt_float(total_pnl)}")
+        lines.append(f"Total RR: {total_rr:.1f}")
 
         send_fn("\n".join(lines))
 
@@ -644,7 +673,7 @@ class AlexBot:
             log.info("[Main] bot running ... Ctrl+C to stop")
 
             # Check monthly report on startup for mirror chat
-            self._maybe_monthly_report(send_fn=tg_m, prefix="Вывод в зеркальный чат", detailed=True)
+            self._maybe_monthly_report(send_fn=tg_m, prefix="Mirror chat output", detailed=True)
             self._maybe_purge_events()
 
             while True:
@@ -652,7 +681,7 @@ class AlexBot:
                 self._maybe_purge_events()
                 time.sleep(1)
         except KeyboardInterrupt:
-            tg_m("⏹️  Бот остановлен пользователем")
+            tg_m("⏹️  Bot stopped by user")
         finally:
             self.ws.stop()
             log.info("[Main] bye.")
