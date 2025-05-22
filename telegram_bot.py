@@ -5,10 +5,7 @@ from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, MIRROR_B_TG_CHAT_ID
 log = logging.getLogger(__name__)
 
 def tg_send(chat_id: str, text: str):
-    """
-    Базовая функция, отправляет text в Telegram-чат chat_id
-    через TELEGRAM_BOT_TOKEN.
-    """
+    """Send *text* to the Telegram chat using ``TELEGRAM_BOT_TOKEN``."""
     if not (TELEGRAM_BOT_TOKEN and chat_id):
         return
     try:
@@ -27,15 +24,11 @@ def tg_send(chat_id: str, text: str):
         log.error("tg_send: %s", e)
 
 def tg_a(txt: str):
-    """
-    Сообщение в основной чат + пишем в логи
-    """
+    """Send a message to the main chat and log it."""
     log.info(f"[tg_a] {txt}")
     tg_send(TELEGRAM_CHAT_ID, txt)
 
 def tg_m(txt: str):
-    """
-    Сообщение в зеркальный чат + пишем в логи
-    """
+    """Send a message to the mirror chat and log it."""
     log.info(f"[tg_m] {txt}")
     tg_send(MIRROR_B_TG_CHAT_ID, txt)
