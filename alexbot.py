@@ -369,6 +369,28 @@ class AlexBot:
         msg = line1 + "\n" + line2
         tg_m(msg)
 
+        # --- NEW: report for the current month so far ---
+        cur_year = today.year
+        cur_month = today.month
+        trades_cur = pg_get_closed_trades_for_month(cur_year, cur_month)
+        if not trades_cur:
+            tg_m(f"No data for {cur_month:02d}.{cur_year} so far.")
+        else:
+            lines = []
+            lines.append(f"\U0001F4CA Report for {cur_month:02d}.{cur_year} (to date)")
+            total_pnl = 0.0
+            total_rr = 0.0
+            for closed_at, symbol, side, reason, volume, pnl, rr in trades_cur:
+                dt_str = closed_at.strftime("%d.%m %H:%M")
+                lines.append(
+                    f"{dt_str} - {symbol} - {side} - {reason} - {self._fmt_qty(symbol, volume)} - PNL={_fmt_float(pnl)} usdt - RR={rr:.1f}"
+                )
+                total_pnl += float(pnl)
+                total_rr += float(rr)
+            lines.append(f"Total PNL: {_fmt_float(total_pnl)} usdt")
+            lines.append(f"Total RR: {total_rr:.1f}")
+            tg_m("\n".join(lines))
+
 
 
 
