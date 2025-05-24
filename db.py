@@ -185,6 +185,8 @@ def pg_insert_closed_trade(
     volume: float,
     pnl: float,
     *,
+    fake_volume: float = 0.0,
+    fake_pnl: float = 0.0,
     created_at=None,
     closed_at=None,
     entry_price: float = 0.0,
@@ -210,11 +212,13 @@ def pg_insert_closed_trade(
                 """
                 INSERT INTO public.closed_trades
                        (symbol, position_side, volume, pnl,
+                        fake_volume, fake_pnl,
                         closed_at, created_at,
                         entry_price, exit_price,
                         stop_price, take_price,
                         reason, rr)
                 VALUES (%s, %s, %s, %s,
+                        %s, %s,
                         %s, %s,
                         %s, %s,
                         %s, %s,
@@ -225,6 +229,8 @@ def pg_insert_closed_trade(
                     side,
                     volume,
                     pnl,
+                    fake_volume,
+                    fake_pnl,
                     closed_at,
                     created_at,
                     entry_price,
@@ -259,6 +265,8 @@ def pg_get_closed_trades_for_month(year: int, month: int):
                        reason,
                        volume,
                        pnl,
+                       fake_volume,
+                       fake_pnl,
                        rr
                   FROM public.closed_trades
                  WHERE closed_at >= %s AND closed_at < %s

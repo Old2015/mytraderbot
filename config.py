@@ -38,3 +38,8 @@ MONTHLY_REPORT_ENABLED = os.getenv("MONTHLY_REPORT_ENABLED", "true").lower() in 
 # ---- Через сколько дней очищать таблицу futures_events ----
 FUTURES_EVENTS_RETENTION_DAYS = int(os.getenv("FUTURES_EVENTS_RETENTION_DAYS", "60"))
 
+# ---- Параметры отображения отчётности ----
+REAL_DEPOSIT = float(os.getenv("REAL_DEPOSIT", "20000"))
+FAKE_DEPOSIT = float(os.getenv("FAKE_DEPOSIT", "3000000"))
+TRADE_FAKE_REPORT = os.getenv("TRADE_FAKE_REPORT", "true").lower() in ("1", "true", "yes")
+

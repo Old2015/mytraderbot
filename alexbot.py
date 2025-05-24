@@ -18,6 +18,7 @@ from config import (
     MIRROR_COEFFICIENT,
     MONTHLY_REPORT_ENABLED,
     FUTURES_EVENTS_RETENTION_DAYS,
+    REAL_DEPOSIT, FAKE_DEPOSIT, TRADE_FAKE_REPORT,
 )
 from db import (
     pg_conn, pg_raw,
@@ -95,6 +96,11 @@ class AlexBot:
 
     def __init__(self):
         log.debug("AlexBot.__init__ called")
+
+        self.use_fake_report = TRADE_FAKE_REPORT
+        self.fake_coef = 1.0
+        if REAL_DEPOSIT > 0:
+            self.fake_coef = FAKE_DEPOSIT / REAL_DEPOSIT
 
         self.mirror_enabled = MIRROR_ENABLED
         if self.mirror_enabled and not (MIRROR_B_API_KEY and MIRROR_B_API_SECRET):
@@ -355,7 +361,7 @@ class AlexBot:
             lines.append(f"📊 Report for {month:02d}.{year}")
             total_pnl = 0.0
             total_rr = 0.0
-            for closed_at, symbol, side, reason, volume, pnl, rr in trades:
+            for closed_at, symbol, side, reason, volume, pnl, fake_vol, fake_pnl, rr in trades:
                 dt_str = closed_at.strftime("%d.%m %H:%M")
                 lines.append(
                     f"{dt_str} - {symbol} - {side} - {reason} - {self._fmt_qty(symbol, volume)} - PNL={_fmt_float(pnl)} usdt - RR={rr:.1f}"
@@ -380,7 +386,7 @@ class AlexBot:
             lines.append(f"\U0001F4CA Report for {cur_month:02d}.{cur_year} (to date)")
             total_pnl = 0.0
             total_rr = 0.0
-            for closed_at, symbol, side, reason, volume, pnl, rr in trades_cur:
+            for closed_at, symbol, side, reason, volume, pnl, fake_vol, fake_pnl, rr in trades_cur:
                 dt_str = closed_at.strftime("%d.%m %H:%M")
                 lines.append(
                     f"{dt_str} - {symbol} - {side} - {reason} - {self._fmt_qty(symbol, volume)} - PNL={_fmt_float(pnl)} usdt - RR={rr:.1f}"
@@ -518,9 +524,14 @@ class AlexBot:
                     rr_val = self._calc_rr(side, old_amt, new_rpnl, old_entry, stop_p, take_p)
                     status = "WIN" if new_rpnl >= 0 else "LOSS"
                     color = "\U0001F7E2" if new_rpnl >= 0 else "\U0001F534"  # green or red circle
+                    display_vol = old_amt * self.fake_coef if self.use_fake_report else old_amt
+                    display_pnl = new_rpnl * self.fake_coef if self.use_fake_report else new_rpnl
                     txt = (
                         f"{pos_color(side)} Trader: {sym} position closed {side_name(side)} 100% "
-                        f"at {self._fmt_price(sym, fill_price)}, RR={abs(rr_val):.1f} {color}{status}"
+                        f"at {self._fmt_price(sym, fill_price)}, "
+                        f"Volume: {self._fmt_qty(sym, display_vol)}, "
+                        f"PNL: {_fmt_float(display_pnl)} usdt, "
+                        f"RR={abs(rr_val):.1f} {color}{status}"
                     )
                     tg_a(txt)
 
@@ -529,6 +540,8 @@ class AlexBot:
                         side,
                         old_amt,
                         new_rpnl,
+                        fake_volume=old_amt * self.fake_coef,
+                        fake_pnl=new_rpnl * self.fake_coef,
                         entry_price=old_entry,
                         exit_price=fill_price,
                         stop_price=stop_p,
@@ -542,10 +555,11 @@ class AlexBot:
                     new_pct = 0
                     if base_amt > 1e-12:
                         new_pct = (new_amt / base_amt) * 100
+                    display_pnl = new_rpnl * self.fake_coef if self.use_fake_report else new_rpnl
                     txt = (
                         f"{pos_color(side)} Trader: {sym} position reduced {side_name(side)} "
                         f"(-{int(ratio)}%, position {int(new_pct)}%) "
-                        f"at {self._fmt_price(sym, fill_price)}, current PNL: {_fmt_float(new_rpnl)}"
+                        f"at {self._fmt_price(sym, fill_price)}, current PNL: {_fmt_float(display_pnl)}"
                     )
                     tg_a(txt)
                     pg_upsert_position("positions", sym, side, new_amt, old_entry, new_rpnl, "binance", False)
@@ -673,7 +687,7 @@ class AlexBot:
             tg_m(txt)
 
 
-    def _maybe_monthly_report(self, send_fn=tg_a, prefix: Optional[str] = None, *, detailed: bool = False):
+    def _maybe_monthly_report(self, send_fn=tg_a, prefix: Optional[str] = None, *, detailed: bool = False, fake: bool = False):
         """Отправка ежемесячного отчёта, если пришёл первый день месяца."""
         if not MONTHLY_REPORT_ENABLED:
             return
@@ -705,17 +719,19 @@ class AlexBot:
 
         total_pnl = 0.0
         total_rr = 0.0
-        for closed_at, symbol, side, reason, volume, pnl, rr in trades:
+        for closed_at, symbol, side, reason, volume, pnl, fake_volume, fake_pnl, rr in trades:
             dt_str = closed_at.strftime("%d-%m %H:%M")
+            use_pnl = fake_pnl if fake else pnl
+            use_vol = fake_volume if fake else volume
             if detailed:
                 lines.append(
-                    f"{dt_str} - {symbol} - {side} - {reason} - {self._fmt_qty(symbol, volume)} - PNL={_fmt_float(pnl)} usdt - RR={rr:.1f}"
+                    f"{dt_str} - {symbol} - {side} - {reason} - {self._fmt_qty(symbol, use_vol)} - PNL={_fmt_float(use_pnl)} usdt - RR={rr:.1f}"
                 )
             else:
                 lines.append(
                     f"{dt_str} - {symbol} - {side} - {reason} - RR={rr:.1f}"
                 )
-            total_pnl += float(pnl)
+            total_pnl += float(use_pnl)
             total_rr += float(rr)
         # lines.append(f"Total PNL: {_fmt_float(total_pnl)}")
         lines.append(f"Total RR: {total_rr:.1f}")
@@ -738,12 +754,12 @@ class AlexBot:
             log.info("[Main] bot running ... Ctrl+C to stop")
 
             # Check monthly report on startup for mirror chat
-            self._maybe_monthly_report(send_fn=tg_m, prefix="Mirror chat output", detailed=True)
+            self._maybe_monthly_report(send_fn=tg_m, prefix="Mirror chat output", detailed=True, fake=False)
             self._maybe_purge_events()
 
             # Основной цикл бота
             while True:
-                self._maybe_monthly_report()
+                self._maybe_monthly_report(fake=self.use_fake_report)
                 self._maybe_purge_events()
                 time.sleep(1)
         except KeyboardInterrupt:
