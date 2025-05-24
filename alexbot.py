@@ -778,7 +778,7 @@ class AlexBot:
         for _, symbol, side, reason, volume, pnl, fake_volume, fake_pnl, rr in trades:
             use_pnl = fake_pnl if fake else pnl
             lines.append(
-                f"{symbol} | {side} | {reason.upper()} | {_fmt_float(use_pnl)} | {rr:.1f}"
+                f"{symbol} | {side} | {reason.upper()} | pnl {_fmt_float(use_pnl)} | RR {rr:.1f}"
             )
             total_pnl += float(use_pnl)
             total_rr += float(rr)
@@ -788,13 +788,13 @@ class AlexBot:
         loss_cnt = trade_cnt - win_cnt
         win_rate = (win_cnt / trade_cnt) * 100 if trade_cnt else 0
 
-        lines.append(f"ИТОГО за {month:02d}.{year}:")
-        lines.append(f"Количество сделок: {trade_cnt}")
-        lines.append(f"Прибыльных - {win_cnt}")
-        lines.append(f"Убыточных - {loss_cnt}")
-        lines.append(f"Винрейт - {win_rate:.0f}%")
-        lines.append(f"RR - {total_rr:.1f}")
-        lines.append(f"Итоговый PNL { _fmt_float(total_pnl)} usdt")
+        lines.append(f"TOTAL for {month:02d}.{year}:")
+        lines.append(f"Number of trades: {trade_cnt}")
+        lines.append(f"Winners: {win_cnt}")
+        lines.append(f"Losers: {loss_cnt}")
+        lines.append(f"Win rate: {win_rate:.0f}%")
+        lines.append(f"RR: {total_rr:.1f}")
+        lines.append(f"Net P&L: { _fmt_float(total_pnl)} usdt")
 
         send_fn("\n".join(lines))
 
