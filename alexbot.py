@@ -176,6 +176,10 @@ class AlexBot:
         val = f"{qty:.{dec}f}"
         return val.rstrip('0').rstrip('.') if '.' in val else val
 
+    def _display_qty(self, qty: float) -> float:
+        """Return quantity scaled for fake report if enabled."""
+        return qty * self.fake_coef if self.use_fake_report else qty
+
     def _fmt_price(self, sym:str, price:float)->str:
         # Форматирование цены с учётом требуемой точности
         dec = self.price_size_map.get(sym, 4)
@@ -440,9 +444,10 @@ class AlexBot:
             pg_delete_order(sym, side, order_id)
             pr= float(o.get("p",0))
             q= float(o.get("q",0))
+            disp_q = self._display_qty(q)
             txt = (
                 f"🔵 Trader: {sym} {otype} canceled. "
-                f"(Was {pos_color(side)} {side_name(side)}, Volume: {self._fmt_qty(sym, q)} "
+                f"(Was {pos_color(side)} {side_name(side)}, Volume: {self._fmt_qty(sym, disp_q)} "
                 f"at {self._fmt_price(sym, pr)})"
             )
             tg_a(txt)
@@ -452,6 +457,7 @@ class AlexBot:
             # значит это реально существующий (найден в openOrders)
             from db import pg_upsert_order
             orig_qty= float(o.get("q",0))
+            disp_orig_qty = self._display_qty(orig_qty)
             stp= float(o.get("sp",0))
             lmt= float(o.get("p",0))
 
@@ -475,7 +481,7 @@ class AlexBot:
                 pg_upsert_order(sym, side, order_id, orig_qty, lmt, "NEW")
                 txt = (
                     f"🔵 Trader: {sym} New LIMIT {pos_color(side)} {side_name(side)}. "
-                    f"Volume: {self._fmt_qty(sym, orig_qty)} at {self._fmt_price(sym, lmt)}."
+                    f"Volume: {self._fmt_qty(sym, disp_orig_qty)} at {self._fmt_price(sym, lmt)}."
                 )
                 tg_a(txt)
 
@@ -715,26 +721,54 @@ class AlexBot:
         lines = []
         if prefix:
             lines.append(prefix)
-        lines.append(f"📊 Report for {month:02d}.{year}")
 
-        total_pnl = 0.0
-        total_rr = 0.0
-        for closed_at, symbol, side, reason, volume, pnl, fake_volume, fake_pnl, rr in trades:
-            dt_str = closed_at.strftime("%d-%m %H:%M")
-            use_pnl = fake_pnl if fake else pnl
-            use_vol = fake_volume if fake else volume
-            if detailed:
+        # detailed mode retained for mirror chat
+        if detailed:
+            lines.append(f"📊 Report for {month:02d}.{year}")
+            total_pnl = 0.0
+            total_rr = 0.0
+            for closed_at, symbol, side, reason, volume, pnl, fake_volume, fake_pnl, rr in trades:
+                dt_str = closed_at.strftime("%d-%m %H:%M")
+                use_pnl = fake_pnl if fake else pnl
+                use_vol = fake_volume if fake else volume
                 lines.append(
                     f"{dt_str} - {symbol} - {side} - {reason} - {self._fmt_qty(symbol, use_vol)} - PNL={_fmt_float(use_pnl)} usdt - RR={rr:.1f}"
                 )
-            else:
-                lines.append(
-                    f"{dt_str} - {symbol} - {side} - {reason} - RR={rr:.1f}"
-                )
+                total_pnl += float(use_pnl)
+                total_rr += float(rr)
+            lines.append(f"Total PNL: {_fmt_float(total_pnl)} usdt")
+            lines.append(f"Total RR: {total_rr:.1f}")
+            send_fn("\n".join(lines))
+            self.last_report_month = cur_month
+            return
+
+        # default output for main channel
+        lines.append(f"Отчет за {month:02d}.{year}")
+        lines.append("торгуемая пара | направление сделки | результат | PNL usdt | RR")
+
+        total_pnl = 0.0
+        total_rr = 0.0
+        win_cnt = 0
+        for _, symbol, side, reason, volume, pnl, fake_volume, fake_pnl, rr in trades:
+            use_pnl = fake_pnl if fake else pnl
+            lines.append(
+                f"{symbol} | {side} | {reason.upper()} | {_fmt_float(use_pnl)} | {rr:.1f}"
+            )
             total_pnl += float(use_pnl)
             total_rr += float(rr)
-        # lines.append(f"Total PNL: {_fmt_float(total_pnl)}")
-        lines.append(f"Total RR: {total_rr:.1f}")
+            if use_pnl >= 0:
+                win_cnt += 1
+        trade_cnt = len(trades)
+        loss_cnt = trade_cnt - win_cnt
+        win_rate = (win_cnt / trade_cnt) * 100 if trade_cnt else 0
+
+        lines.append(f"ИТОГО за {month:02d}.{year}:")
+        lines.append(f"Количество сделок: {trade_cnt}")
+        lines.append(f"Прибыльных - {win_cnt}")
+        lines.append(f"Убыточных - {loss_cnt}")
+        lines.append(f"Винрейт - {win_rate:.0f}%")
+        lines.append(f"RR - {total_rr:.1f}")
+        lines.append(f"Итоговый PNL { _fmt_float(total_pnl)} usdt")
 
         send_fn("\n".join(lines))
 
