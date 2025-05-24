@@ -338,7 +338,8 @@ class AlexBot:
     def _monthly_info_at_start(self):
         """
         Send a report for the previous month and for the current month
-        so far to the mirror chat using real trade data.
+        so far to the mirror chat using real trade data and additionally
+        send the same information using fake statistics.
         """
 
         # Report for the previous month
@@ -355,6 +356,7 @@ class AlexBot:
         if not trades:
             tg_m(f"No data for {month:02d}.{year}, report not generated.")
         else:
+            # real statistics
             lines = []
             lines.append(f"📊 Report for {month:02d}.{year}")
             total_pnl = 0.0
@@ -370,6 +372,22 @@ class AlexBot:
             lines.append(f"Total RR: {total_rr:.1f}")
             tg_m("\n".join(lines))
 
+            # fake statistics
+            lines = []
+            lines.append(f"\U0001F916 Fake report for {month:02d}.{year}")
+            total_pnl = 0.0
+            total_rr = 0.0
+            for closed_at, symbol, side, reason, volume, pnl, fake_vol, fake_pnl, rr in trades:
+                dt_str = closed_at.strftime("%d.%m %H:%M")
+                lines.append(
+                    f"{dt_str} - {symbol} - {side} - {reason} - {self._fmt_qty(symbol, fake_vol)} - PNL={_fmt_float(fake_pnl)} usdt - RR={rr:.1f}"
+                )
+                total_pnl += float(fake_pnl)
+                total_rr += float(rr)
+            lines.append(f"Total PNL: {_fmt_float(total_pnl)} usdt")
+            lines.append(f"Total RR: {total_rr:.1f}")
+            tg_m("\n".join(lines))
+
         # --- NEW: report for the current month so far ---
         cur_year = today.year
         cur_month = today.month
@@ -377,6 +395,7 @@ class AlexBot:
         if not trades_cur:
             tg_m(f"No data for {cur_month:02d}.{cur_year} so far.")
         else:
+            # real statistics
             lines = []
             lines.append(f"\U0001F4CA Report for {cur_month:02d}.{cur_year} (to date)")
             total_pnl = 0.0
@@ -387,6 +406,22 @@ class AlexBot:
                     f"{dt_str} - {symbol} - {side} - {reason} - {self._fmt_qty(symbol, volume)} - PNL={_fmt_float(pnl)} usdt - RR={rr:.1f}"
                 )
                 total_pnl += float(pnl)
+                total_rr += float(rr)
+            lines.append(f"Total PNL: {_fmt_float(total_pnl)} usdt")
+            lines.append(f"Total RR: {total_rr:.1f}")
+            tg_m("\n".join(lines))
+
+            # fake statistics for current month
+            lines = []
+            lines.append(f"\U0001F916 Fake report for {cur_month:02d}.{cur_year} (to date)")
+            total_pnl = 0.0
+            total_rr = 0.0
+            for closed_at, symbol, side, reason, volume, pnl, fake_vol, fake_pnl, rr in trades_cur:
+                dt_str = closed_at.strftime("%d.%m %H:%M")
+                lines.append(
+                    f"{dt_str} - {symbol} - {side} - {reason} - {self._fmt_qty(symbol, fake_vol)} - PNL={_fmt_float(fake_pnl)} usdt - RR={rr:.1f}"
+                )
+                total_pnl += float(fake_pnl)
                 total_rr += float(rr)
             lines.append(f"Total PNL: {_fmt_float(total_pnl)} usdt")
             lines.append(f"Total RR: {total_rr:.1f}")
