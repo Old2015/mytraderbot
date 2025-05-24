@@ -337,17 +337,11 @@ class AlexBot:
     # NEW: method called on startup to post info to the mirror chat
     def _monthly_info_at_start(self):
         """
-        1) Post whether the monthly report for the main chat is enabled.
-        2) Post the report for the previous month (or a "no data" message) to the mirror chat.
+        Send a report for the previous month and for the current month
+        so far to the mirror chat using real trade data.
         """
-        # --- информация о настройках и отчёт за прошлый месяц ---
-        # 1) Report enabled?
-        if MONTHLY_REPORT_ENABLED:
-            line1 = "Monthly report to the main group on the first: ENABLED"
-        else:
-            line1 = "Monthly report to the main group on the first: DISABLED"
 
-        # 2) Report for the previous month
+        # Report for the previous month
         # Determine previous month
         today = date.today()
         if today.month == 1:
@@ -359,7 +353,7 @@ class AlexBot:
 
         trades = pg_get_closed_trades_for_month(year, month)
         if not trades:
-            line2 = f"No data for {month:02d}.{year}, report not generated."
+            tg_m(f"No data for {month:02d}.{year}, report not generated.")
         else:
             lines = []
             lines.append(f"📊 Report for {month:02d}.{year}")
@@ -374,10 +368,7 @@ class AlexBot:
                 total_rr += float(rr)
             lines.append(f"Total PNL: {_fmt_float(total_pnl)} usdt")
             lines.append(f"Total RR: {total_rr:.1f}")
-            line2 = "\n".join(lines)
-
-        msg = line1 + "\n" + line2
-        tg_m(msg)
+            tg_m("\n".join(lines))
 
         # --- NEW: report for the current month so far ---
         cur_year = today.year
