@@ -17,6 +17,7 @@ from config import (
     MIRROR_ENABLED, MIRROR_B_API_KEY, MIRROR_B_API_SECRET,
     MIRROR_COEFFICIENT,
     MONTHLY_REPORT_ENABLED,
+    MONTHLY_REPORT_ON_START,
     FUTURES_EVENTS_RETENTION_DAYS,
     REAL_DEPOSIT, FAKE_DEPOSIT, TRADE_FAKE_REPORT,
 )
@@ -141,6 +142,26 @@ class AlexBot:
         self._last_purge_date = None
         # NEW: immediately show whether the report is enabled and send last month's report
         self._monthly_info_at_start()   # <-- call helper
+        if MONTHLY_REPORT_ON_START:
+            today = date.today()
+            if today.month == 1:
+                year = today.year - 1
+                month = 12
+            else:
+                year = today.year
+                month = today.month - 1
+            self._send_monthly_summary(
+                year,
+                month,
+                header=f"Отчет за {month:02d}.{year}",
+                fake=self.use_fake_report,
+            )
+            self._send_monthly_summary(
+                today.year,
+                today.month,
+                header=f"Отчет за {today.month:02d}.{today.year} (to date)",
+                fake=self.use_fake_report,
+            )
 
     # ---------- точность ----------
     def _init_symbol_precisions(self):
@@ -427,6 +448,53 @@ class AlexBot:
             lines.append(f"Total RR: {total_rr:.1f}")
             tg_m("\n".join(lines))
 
+
+    def _send_monthly_summary(
+        self,
+        year: int,
+        month: int,
+        *,
+        header: str,
+        send_fn=tg_a,
+        fake: bool = False,
+    ):
+        """Send summary report for the specified month."""
+        trades = pg_get_closed_trades_for_month(year, month)
+        if not trades:
+            send_fn(f"No data for {month:02d}.{year}")
+            return
+
+        lines = [header]
+        lines.append(
+            "торгуемая пара | направление сделки | результат | PNL usdt | RR"
+        )
+
+        total_pnl = 0.0
+        total_rr = 0.0
+        win_cnt = 0
+        for _, symbol, side, reason, volume, pnl, fake_volume, fake_pnl, rr in trades:
+            use_pnl = fake_pnl if fake else pnl
+            lines.append(
+                f"{symbol} | {side} | {reason.upper()} | pnl {_fmt_float(use_pnl)} | RR {rr:.1f}"
+            )
+            total_pnl += float(use_pnl)
+            total_rr += float(rr)
+            if use_pnl >= 0:
+                win_cnt += 1
+
+        trade_cnt = len(trades)
+        loss_cnt = trade_cnt - win_cnt
+        win_rate = (win_cnt / trade_cnt) * 100 if trade_cnt else 0
+
+        lines.append(f"TOTAL for {month:02d}.{year}:")
+        lines.append(f"Number of trades: {trade_cnt}")
+        lines.append(f"Winners: {win_cnt}")
+        lines.append(f"Losers: {loss_cnt}")
+        lines.append(f"Win rate: {win_rate:.0f}%")
+        lines.append(f"RR: {total_rr:.1f}")
+        lines.append(f"Net P&L: { _fmt_float(total_pnl)} usdt")
+
+        send_fn("\n".join(lines))
 
 
 

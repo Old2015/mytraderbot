@@ -33,7 +33,17 @@ MIRROR_B_API_SECRET= os.getenv("MIRROR_B_API_SECRET")
 MIRROR_COEFFICIENT = float(os.getenv("MIRROR_COEFFICIENT", "1.0"))
 
 # ---- Опции ежемесячного отчёта ----
-MONTHLY_REPORT_ENABLED = os.getenv("MONTHLY_REPORT_ENABLED", "true").lower() in ("1", "true", "yes")
+MONTHLY_REPORT_ENABLED = os.getenv("MONTHLY_REPORT_ENABLED", "true").lower() in (
+    "1",
+    "true",
+    "yes",
+)
+# Отправлять ли отчёты при запуске бота
+MONTHLY_REPORT_ON_START = os.getenv("MONTHLY_REPORT_ON_START", "false").lower() in (
+    "1",
+    "true",
+    "yes",
+)
 
 # ---- Через сколько дней очищать таблицу futures_events ----
 FUTURES_EVENTS_RETENTION_DAYS = int(os.getenv("FUTURES_EVENTS_RETENTION_DAYS", "60"))
