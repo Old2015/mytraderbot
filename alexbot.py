@@ -1,6 +1,7 @@
 import time
 import logging
 from datetime import datetime, date, timedelta
+import calendar
 from typing import Dict, Any
 
 # ------------------------------------------------------------
@@ -69,6 +70,11 @@ def _fmt_float(x: float, digits: int = 4) -> str:
     """Форматируем число с плавающей точкой и обрезаем лишние нули."""
     s= f"{x:.{digits}f}"
     return s.rstrip('0').rstrip('.') if '.' in s else s
+
+def _fmt_usdt(x: float, sign: bool = False) -> str:
+    """Format number with optional sign and space as thousands separator."""
+    fmt = "+,.0f" if sign else ",.0f"
+    return format(x, fmt).replace(",", " ")
 
 def decode_side_ws(o: Dict[str,Any]) -> str:
     """Определяем сторону позиции на основе сообщения WS."""
@@ -150,16 +156,17 @@ class AlexBot:
             else:
                 year = today.year
                 month = today.month - 1
+            month_name = calendar.month_name[month]
             self._send_monthly_summary(
                 year,
                 month,
-                header=f"Отчет за {month:02d}.{year}",
+                header=f"Monthly report for {month_name} {year}",
                 fake=self.use_fake_report,
             )
             self._send_monthly_summary(
                 today.year,
                 today.month,
-                header=f"Отчет за {today.month:02d}.{today.year} (to date)",
+                header=f"Monthly report for {calendar.month_name[today.month]} {today.year} (to date)",
                 fake=self.use_fake_report,
             )
 
@@ -464,18 +471,17 @@ class AlexBot:
             send_fn(f"No data for {month:02d}.{year}")
             return
 
+        month_name = calendar.month_name[month]
         lines = [header]
-        lines.append(
-            "торгуемая пара | направление сделки | результат | PNL usdt | RR"
-        )
 
         total_pnl = 0.0
         total_rr = 0.0
         win_cnt = 0
         for _, symbol, side, reason, volume, pnl, fake_volume, fake_pnl, rr in trades:
             use_pnl = fake_pnl if fake else pnl
+            short_side = side[0] if side else ""
             lines.append(
-                f"{symbol} | {side} | {reason.upper()} | pnl {_fmt_float(use_pnl)} | RR {rr:.1f}"
+                f"{symbol} | {short_side} |  pnl {_fmt_usdt(use_pnl, sign=True)} | RR {rr:+.1f}"
             )
             total_pnl += float(use_pnl)
             total_rr += float(rr)
@@ -486,13 +492,13 @@ class AlexBot:
         loss_cnt = trade_cnt - win_cnt
         win_rate = (win_cnt / trade_cnt) * 100 if trade_cnt else 0
 
-        lines.append(f"TOTAL for {month:02d}.{year}:")
+        lines.append(f"TOTAL for {month_name} {year}:")
         lines.append(f"Number of trades: {trade_cnt}")
         lines.append(f"Winners: {win_cnt}")
         lines.append(f"Losers: {loss_cnt}")
         lines.append(f"Win rate: {win_rate:.0f}%")
         lines.append(f"RR: {total_rr:.1f}")
-        lines.append(f"Net P&L: { _fmt_float(total_pnl)} usdt")
+        lines.append(f"Net P&L: {_fmt_usdt(total_pnl)} usdt")
 
         send_fn("\n".join(lines))
 
@@ -837,16 +843,17 @@ class AlexBot:
             return
 
         # default output for main channel
-        lines.append(f"Отчет за {month:02d}.{year}")
-        lines.append("торгуемая пара | направление сделки | результат | PNL usdt | RR")
+        month_name = calendar.month_name[month]
+        lines.append(f"Monthly report for {month_name} {year}")
 
         total_pnl = 0.0
         total_rr = 0.0
         win_cnt = 0
         for _, symbol, side, reason, volume, pnl, fake_volume, fake_pnl, rr in trades:
             use_pnl = fake_pnl if fake else pnl
+            short_side = side[0] if side else ""
             lines.append(
-                f"{symbol} | {side} | {reason.upper()} | pnl {_fmt_float(use_pnl)} | RR {rr:.1f}"
+                f"{symbol} | {short_side} |  pnl {_fmt_usdt(use_pnl, sign=True)} | RR {rr:+.1f}"
             )
             total_pnl += float(use_pnl)
             total_rr += float(rr)
@@ -856,13 +863,13 @@ class AlexBot:
         loss_cnt = trade_cnt - win_cnt
         win_rate = (win_cnt / trade_cnt) * 100 if trade_cnt else 0
 
-        lines.append(f"TOTAL for {month:02d}.{year}:")
+        lines.append(f"TOTAL for {month_name} {year}:")
         lines.append(f"Number of trades: {trade_cnt}")
         lines.append(f"Winners: {win_cnt}")
         lines.append(f"Losers: {loss_cnt}")
         lines.append(f"Win rate: {win_rate:.0f}%")
         lines.append(f"RR: {total_rr:.1f}")
-        lines.append(f"Net P&L: { _fmt_float(total_pnl)} usdt")
+        lines.append(f"Net P&L: {_fmt_usdt(total_pnl)} usdt")
 
         send_fn("\n".join(lines))
 
