@@ -481,7 +481,7 @@ class AlexBot:
             use_pnl = fake_pnl if fake else pnl
             short_side = side[0] if side else ""
             lines.append(
-                f"{symbol} | {short_side} |  pnl {_fmt_usdt(use_pnl, sign=True)} | RR {rr:+.1f}"
+                f"{symbol} |{short_side}| $ {_fmt_usdt(use_pnl, sign=True)} | RR {rr:+.1f}"
             )
             total_pnl += float(use_pnl)
             total_rr += float(rr)
