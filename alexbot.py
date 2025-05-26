@@ -617,24 +617,27 @@ class AlexBot:
             base_amt = self.base_sizes.get((sym, side), old_amt if old_amt>1e-12 else fill_qty)
 
             if reduce_flag:
-                new_amt= old_amt- fill_qty
-                ratio=100
-                if old_amt>1e-12:
-                    ratio= (fill_qty/old_amt)*100
-                if ratio>100: ratio=100
+                new_amt = old_amt - fill_qty
+                ratio = 100
+                if old_amt > 1e-12:
+                    ratio = (fill_qty / old_amt) * 100
+                if ratio > 100:
+                    ratio = 100
+
+                # Определяем причину закрытия (тейк/стоп/маркет)
+                reason = "market"
+                stop_p = 0.0
+                take_p = 0.0
+                if otype in CHILD_TYPES:
+                    sp_val = float(o.get("sp", 0))
+                    if "STOP" in otype:
+                        stop_p = sp_val
+                        reason = "stop"
+                    else:
+                        take_p = sp_val
+                        reason = "take"
 
                 if new_amt <= 1e-8:
-                    stop_p = 0.0
-                    take_p = 0.0
-                    reason = "market"
-                    if otype in CHILD_TYPES:
-                        sp_val = float(o.get("sp", 0))
-                        if "STOP" in otype:
-                            stop_p = sp_val
-                            reason = "stop"
-                        else:
-                            take_p = sp_val
-                            reason = "take"
 
                     rr_val = self._calc_rr(side, old_amt, new_rpnl, old_entry, stop_p, take_p)
                     status = "WIN" if new_rpnl >= 0 else "LOSS"
@@ -643,7 +646,7 @@ class AlexBot:
                     display_pnl = new_rpnl * self.fake_coef if self.use_fake_report else new_rpnl
                     txt = (
                         f"{pos_color(side)} Trader: {sym} position closed {side_name(side)} 100% "
-                        f"at {self._fmt_price(sym, fill_price)}, "
+                        f"by {reason.upper()} at {self._fmt_price(sym, fill_price)}, "
                         f"Volume: {self._fmt_qty(sym, display_vol)}, "
                         f"PNL: {_fmt_float(display_pnl)} usdt, "
                         f"RR={abs(rr_val):.1f} {color}{status}"
@@ -670,11 +673,18 @@ class AlexBot:
                     new_pct = 0
                     if base_amt > 1e-12:
                         new_pct = (new_amt / base_amt) * 100
+                    closed_pct = 0
+                    if base_amt > 1e-12:
+                        closed_pct = (fill_qty / base_amt) * 100
                     display_pnl = new_rpnl * self.fake_coef if self.use_fake_report else new_rpnl
+                    disp_closed = self._display_qty(fill_qty)
+                    disp_left = self._display_qty(new_amt)
                     txt = (
-                        f"{pos_color(side)} Trader: {sym} position reduced {side_name(side)} "
-                        f"(-{int(ratio)}%, position {int(new_pct)}%) "
-                        f"at {self._fmt_price(sym, fill_price)}, current PNL: {_fmt_float(display_pnl)}"
+                        f"{pos_color(side)} Trader: {sym} partial {reason.upper()} {side_name(side)} "
+                        f"closed {self._fmt_qty(sym, disp_closed)} ({int(closed_pct)}%) "
+                        f"at {self._fmt_price(sym, fill_price)}, "
+                        f"left {self._fmt_qty(sym, disp_left)} ({int(new_pct)}%), "
+                        f"current PNL: {_fmt_float(display_pnl)}"
                     )
                     tg_a(txt)
                     pg_upsert_position("positions", sym, side, new_amt, old_entry, new_rpnl, "binance", False)
