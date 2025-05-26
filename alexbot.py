@@ -579,9 +579,18 @@ class AlexBot:
                 tg_a(txt)
             else:
                 pg_upsert_order(sym, side, order_id, orig_qty, lmt, "NEW")
+                pct_txt = ""
+                if reduce_flag:
+                    base_amt = self.base_sizes.get((sym, side)) or 0.0
+                    if base_amt > 1e-12:
+                        pct = (orig_qty / base_amt) * 100
+                        pct_txt = f" ({pct:.0f}%)"
+                    action = "close"
+                else:
+                    action = side_name(side)
                 txt = (
-                    f"🔵 Trader: {sym} New LIMIT {pos_color(side)} {side_name(side)}. "
-                    f"Volume: {self._fmt_qty(sym, disp_orig_qty)} at {self._fmt_price(sym, lmt)}."
+                    f"🔵 Trader: {sym} New LIMIT {pos_color(side)} {action}. "
+                    f"Volume: {self._fmt_qty(sym, disp_orig_qty)}{pct_txt} at {self._fmt_price(sym, lmt)}."
                 )
                 tg_a(txt)
 
@@ -682,10 +691,12 @@ class AlexBot:
 
                 if old_amt < 1e-12:
                     self.base_sizes[(sym, side)] = new_amt
+                    display_vol = self._display_qty(new_amt)
                     txt = (
                         f"{pos_color(side)} Trader: {sym} position opened {side_name(side)} "
                         f"{reason_text(otype)} 100% "
-                        f"at {self._fmt_price(sym, fill_price)}"
+                        f"at {self._fmt_price(sym, fill_price)}, "
+                        f"Volume: {self._fmt_qty(sym, display_vol)}"
                     )
                 else:
                     new_pct = 0
