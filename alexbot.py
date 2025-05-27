@@ -714,11 +714,7 @@ class AlexBot:
                     tg_m(f"[Main] {txt}")
                     self._mirror_reduce(sym, side, fill_qty, fill_price, partial_pnl)
             else:
-                new_amt= old_amt+ fill_qty
-                ratio=100
-                if old_amt>1e-12:
-                    ratio= (fill_qty/old_amt)*100
-                    if ratio>100: ratio=100
+                new_amt = old_amt + fill_qty
 
                 if old_amt < 1e-12:
                     self.base_sizes[(sym, side)] = new_amt
@@ -730,12 +726,17 @@ class AlexBot:
                         f"Volume: {self._fmt_qty(sym, display_vol)}"
                     )
                 else:
+                    add_pct = 0
                     new_pct = 0
                     if base_amt > 1e-12:
+                        add_pct = (fill_qty / base_amt) * 100
                         new_pct = (new_amt / base_amt) * 100
+                    disp_add = self._display_qty(fill_qty)
+                    disp_new = self._display_qty(new_amt)
                     txt = (
                         f"{pos_color(side)} Trader: {sym} position increased {side_name(side)} "
-                        f"(+{int(ratio)}%, position {int(new_pct)}%) "
+                        f"+{self._fmt_qty(sym, disp_add)} ({int(add_pct)}%) -> "
+                        f"{self._fmt_qty(sym, disp_new)} ({int(new_pct)}%) "
                         f"at {self._fmt_price(sym, fill_price)}"
                     )
 
@@ -820,16 +821,14 @@ class AlexBot:
             )
             tg_m(txt)
         else:
-            ratio=100
-            if old_m_amt>1e-12:
-                ratio= (inc_qty/old_m_amt)*100
-                if ratio>100: ratio=100
+            add_pct = 0
             new_pct = 0
             if base_m_amt > 1e-12:
+                add_pct = (inc_qty / base_m_amt) * 100
                 new_pct = (new_m_amt / base_m_amt) * 100
             txt = (
                 f"[Mirror]: {pos_color(side)} Trader: {sym} position increased {side_name(side)} "
-                f"({int(ratio)}%, {_fmt_float(old_m_amt)} -> {_fmt_float(new_m_amt)}, position {int(new_pct)}%) "
+                f"+{_fmt_float(inc_qty)} ({int(add_pct)}%) -> {_fmt_float(new_m_amt)} ({int(new_pct)}%) "
                 f"{rtxt} at {self._fmt_price(sym, fill_price)}"
             )
             tg_m(txt)
