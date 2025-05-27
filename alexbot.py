@@ -596,8 +596,10 @@ class AlexBot:
                 pg_upsert_order(sym, side, order_id, orig_qty, price, "NEW")
                 kind = "STOP" if "STOP" in otype else "TAKE"
                 if kind == "TAKE":
-                    base_amt = self.base_sizes.get((sym, side)) or 0.0
                     pct_txt = ""
+                    pos = pg_get_position("positions", sym, side)
+                    curr_amt = pos[0] if pos else 0.0
+                    base_amt = curr_amt if curr_amt > 1e-12 else self.base_sizes.get((sym, side)) or 0.0
                     if base_amt > 1e-12:
                         pct = (orig_qty / base_amt) * 100
                         pct_txt = f", {pct:.0f}%, Volume {self._fmt_qty(sym, disp_orig_qty)}"
