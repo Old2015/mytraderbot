@@ -2,7 +2,7 @@ import time
 import logging
 from datetime import datetime, date, timedelta
 import calendar
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 # ------------------------------------------------------------
 # Основной модуль торгового бота. Здесь реализована логика
@@ -83,14 +83,14 @@ def _format_monthly_table(
     year: int,
     *,
     fake: bool = False,
-) -> list[str]:
+) -> List[str]:
     """Return formatted monthly report lines."""
 
     col1_w = 11
     col2_w = 6
     col3_w = 13
 
-    lines: list[str] = []
+    lines: List[str] = []
 
     lines.append(f"\ud83d\udcca Monthly Performance — {month_name} {year}")
     lines.append("")
