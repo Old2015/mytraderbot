@@ -92,7 +92,7 @@ def _format_monthly_table(
 
     lines: List[str] = []
 
-    lines.append(f"\ud83d\udcca Monthly Performance — {month_name} {year}")
+    lines.append(f"\U0001F4CA Monthly Performance — {month_name} {year}")
     lines.append("")
     lines.append("\u27a1\ufe0f  All trades are listed below in strict")
     lines.append("chronological order (earliest \u2192 latest).")
