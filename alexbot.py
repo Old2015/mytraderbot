@@ -780,6 +780,9 @@ class AlexBot:
                 if self.mirror_enabled:
                     tg_m(f"[Main] {txt}")
                     self._mirror_reduce(sym, side, fill_qty, fill_price, partial_pnl, reason)
+
+                # warn about outdated protective orders
+                self._warn_protective_orders(sym, side, old_amt, new_amt)
             else:
                 new_amt = old_amt + fill_qty
 
@@ -820,6 +823,9 @@ class AlexBot:
                 if self.mirror_enabled:
                     tg_m(f"[Main] {txt}")
                     self._mirror_increase(sym, side, fill_qty, fill_price, reason_text(otype))
+
+                # warn about outdated protective orders
+                self._warn_protective_orders(sym, side, old_amt, new_amt)
 
     def _mirror_reduce(self, sym: str, side: str, fill_qty: float, fill_price: float, partial_pnl: float, reason: str):
         old_m_amt, old_m_entry, old_m_rpnl= pg_get_position("mirror_positions", sym, side) or (0.0,0.0,0.0)
@@ -910,6 +916,43 @@ class AlexBot:
             )
             tg_m(txt)
             self.mirror_base_sizes[(sym, side)] = new_m_amt
+
+
+    def _warn_protective_orders(self, symbol: str, side: str, old_amt: float, new_amt: float) -> None:
+        """Detect mismatched stop/take orders after position size change."""
+        if abs(new_amt - old_amt) <= 1e-8:
+            return
+        try:
+            orders = self.client_a.futures_get_open_orders(symbol=symbol)
+        except Exception as e:
+            log.error("_warn_protective_orders: %s", e)
+            return
+
+        for od in orders:
+            if od.get("status") != "NEW":
+                continue
+            otype = od.get("type", "")
+            if otype not in CHILD_TYPES:
+                continue
+            raw_side = od.get("side", "")
+            reduce_f = bool(od.get("reduceOnly", False))
+            close_pos = (od.get("closePosition", "false") == "true")
+            order_side = decode_side_openorders(raw_side, reduce_f, close_pos)
+            if order_side != side:
+                continue
+            qty = float(od.get("origQty", 0))
+            if abs(qty - new_amt) <= 1e-8:
+                continue
+            kind = "take-profit" if "TAKE_PROFIT" in otype else "stop-loss"
+            msg = (
+                f"⚠️ Trader: {symbol} {side_name(side)}. Position size changed "
+                f"from {self._fmt_qty(symbol, self._display_qty(old_amt))} to "
+                f"{self._fmt_qty(symbol, self._display_qty(new_amt))}.\n"
+                f"Existing {kind} (order {od.get('orderId')}) volume "
+                f"{self._fmt_qty(symbol, self._display_qty(qty))}.\n"
+                "Please update SL/TP manually."
+            )
+            tg_m(msg)
 
 
     def _maybe_monthly_report(self, send_fn=tg_a, prefix: Optional[str] = None, *, detailed: bool = False, fake: bool = False):
