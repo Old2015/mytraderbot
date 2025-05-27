@@ -99,7 +99,7 @@ def _format_monthly_table(
     lines.append("")
 
     lines.append(
-        f"{'Instrument':<{col1_w}}  {'Side':<{col2_w}}  {'P&L (USDT)':>{col3_w}}"
+        f"{'Instrument':<{col1_w}}  {'Side':<{col2_w}}  {'PnL (USDT)':>{col3_w}}"
     )
     lines.append(
         f"{'-'*col1_w}  {'-'*col2_w}  {'-'*col3_w}"
@@ -465,11 +465,11 @@ class AlexBot:
             for closed_at, symbol, side, reason, volume, pnl, fake_vol, fake_pnl, rr in trades:
                 dt_str = closed_at.strftime("%d.%m %H:%M")
                 lines.append(
-                    f"{dt_str} - {symbol} - {side} - {reason} - {self._fmt_qty(symbol, volume)} - PNL={_fmt_float(pnl)} usdt - RR={rr:.1f}"
+                    f"{dt_str} - {symbol} - {side} - {reason} - {self._fmt_qty(symbol, volume)} - PnL={_fmt_float(pnl)} usdt - RR={rr:.1f}"
                 )
                 total_pnl += float(pnl)
                 total_rr += float(rr)
-            lines.append(f"Total PNL: {_fmt_float(total_pnl)} usdt")
+            lines.append(f"Total PnL: {_fmt_float(total_pnl)} usdt")
             lines.append(f"Total RR: {total_rr:.1f}")
             tg_m("\n".join(lines))
 
@@ -481,11 +481,11 @@ class AlexBot:
             for closed_at, symbol, side, reason, volume, pnl, fake_vol, fake_pnl, rr in trades:
                 dt_str = closed_at.strftime("%d.%m %H:%M")
                 lines.append(
-                    f"{dt_str} - {symbol} - {side} - {reason} - {self._fmt_qty(symbol, fake_vol)} - PNL={_fmt_float(fake_pnl)} usdt - RR={rr:.1f}"
+                    f"{dt_str} - {symbol} - {side} - {reason} - {self._fmt_qty(symbol, fake_vol)} - PnL={_fmt_float(fake_pnl)} usdt - RR={rr:.1f}"
                 )
                 total_pnl += float(fake_pnl)
                 total_rr += float(rr)
-            lines.append(f"Total PNL: {_fmt_float(total_pnl)} usdt")
+            lines.append(f"Total PnL: {_fmt_float(total_pnl)} usdt")
             lines.append(f"Total RR: {total_rr:.1f}")
             tg_m("\n".join(lines))
 
@@ -504,11 +504,11 @@ class AlexBot:
             for closed_at, symbol, side, reason, volume, pnl, fake_vol, fake_pnl, rr in trades_cur:
                 dt_str = closed_at.strftime("%d.%m %H:%M")
                 lines.append(
-                    f"{dt_str} - {symbol} - {side} - {reason} - {self._fmt_qty(symbol, volume)} - PNL={_fmt_float(pnl)} usdt - RR={rr:.1f}"
+                    f"{dt_str} - {symbol} - {side} - {reason} - {self._fmt_qty(symbol, volume)} - PnL={_fmt_float(pnl)} usdt - RR={rr:.1f}"
                 )
                 total_pnl += float(pnl)
                 total_rr += float(rr)
-            lines.append(f"Total PNL: {_fmt_float(total_pnl)} usdt")
+            lines.append(f"Total PnL: {_fmt_float(total_pnl)} usdt")
             lines.append(f"Total RR: {total_rr:.1f}")
             tg_m("\n".join(lines))
 
@@ -520,11 +520,11 @@ class AlexBot:
             for closed_at, symbol, side, reason, volume, pnl, fake_vol, fake_pnl, rr in trades_cur:
                 dt_str = closed_at.strftime("%d.%m %H:%M")
                 lines.append(
-                    f"{dt_str} - {symbol} - {side} - {reason} - {self._fmt_qty(symbol, fake_vol)} - PNL={_fmt_float(fake_pnl)} usdt - RR={rr:.1f}"
+                    f"{dt_str} - {symbol} - {side} - {reason} - {self._fmt_qty(symbol, fake_vol)} - PnL={_fmt_float(fake_pnl)} usdt - RR={rr:.1f}"
                 )
                 total_pnl += float(fake_pnl)
                 total_rr += float(rr)
-            lines.append(f"Total PNL: {_fmt_float(total_pnl)} usdt")
+            lines.append(f"Total PnL: {_fmt_float(total_pnl)} usdt")
             lines.append(f"Total RR: {total_rr:.1f}")
             tg_m("\n".join(lines))
 
@@ -568,7 +568,7 @@ class AlexBot:
         fill_price = float(o.get("ap", 0))  # цена исполнения
         fill_qty = float(o.get("l", 0))     # исполненный объём
         reduce_flag = bool(o.get("R", False))
-        partial_pnl = float(o.get("rp", 0.0))  # PNL части ордера
+        partial_pnl = float(o.get("rp", 0.0))  # PnL части ордера
         order_id = int(o.get("i", 0))
 
         # Определяем сторону позиции (LONG/SHORT)
@@ -736,7 +736,7 @@ class AlexBot:
                     txt = (
                         f"{pos_color(side)} {sym} {side_name(side)} position closed 100% by {reason_word} "
                         f"at {self._fmt_price(sym, fill_price)}, Volume: {self._fmt_qty(sym, display_vol)}, "
-                        f"PNL: {_fmt_float(display_pnl)} usdt"
+                        f"PnL: {_fmt_float(display_pnl)} usdt"
                     )
                     tg_a(txt)
 
@@ -771,7 +771,7 @@ class AlexBot:
                         f"-{self._fmt_qty(sym, disp_closed)} (-{int(closed_pct)}%) -> "
                         f"{self._fmt_qty(sym, disp_left)} "
                         f"at {self._fmt_price(sym, fill_price)}, "
-                        f"current PNL: {_fmt_float(display_pnl)}"
+                        f"current PnL: {_fmt_float(display_pnl)}"
                     )
                     tg_a(txt)
                     pg_upsert_position("positions", sym, side, new_amt, old_entry, new_rpnl, "binance", False)
@@ -858,7 +858,7 @@ class AlexBot:
             txt = (
                 f"[Mirror]: {pos_color(side)} {sym} {side_name(side)} position closed 100% by {reason_word} "
                 f"({int(ratio)}%, {_fmt_float(old_m_amt)} -> 0.0, position 0%) "
-                f"at {self._fmt_price(sym, fill_price)}, PNL: {_fmt_float(new_m_pnl)}"
+                f"at {self._fmt_price(sym, fill_price)}, PnL: {_fmt_float(new_m_pnl)}"
             )
             tg_m(txt)
         else:
@@ -866,7 +866,7 @@ class AlexBot:
             txt = (
                 f"[Mirror]: {pos_color(side)} {sym} {side_name(side)} position decreased "
                 f"-{_fmt_float(dec_qty)} (-{int(ratio)}%) -> {_fmt_float(new_m_amt)} "
-                f"at {self._fmt_price(sym, fill_price)}, PNL: {_fmt_float(new_m_pnl)}"
+                f"at {self._fmt_price(sym, fill_price)}, PnL: {_fmt_float(new_m_pnl)}"
             )
             tg_m(txt)
             self.mirror_base_sizes[(sym, side)] = new_m_amt
@@ -994,11 +994,11 @@ class AlexBot:
                 use_pnl = fake_pnl if fake else pnl
                 use_vol = fake_volume if fake else volume
                 lines.append(
-                    f"{dt_str} - {symbol} - {side} - {reason} - {self._fmt_qty(symbol, use_vol)} - PNL={_fmt_float(use_pnl)} usdt - RR={rr:.1f}"
+                    f"{dt_str} - {symbol} - {side} - {reason} - {self._fmt_qty(symbol, use_vol)} - PnL={_fmt_float(use_pnl)} usdt - RR={rr:.1f}"
                 )
                 total_pnl += float(use_pnl)
                 total_rr += float(rr)
-            lines.append(f"Total PNL: {_fmt_float(total_pnl)} usdt")
+            lines.append(f"Total PnL: {_fmt_float(total_pnl)} usdt")
             lines.append(f"Total RR: {total_rr:.1f}")
             send_fn("\n".join(lines))
             self.last_report_month = cur_month
