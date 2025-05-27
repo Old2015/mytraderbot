@@ -600,15 +600,15 @@ class AlexBot:
                 kind_txt = "stop-loss" if "STOP" in otype else "take-profit"
                 price = sp if sp > 1e-12 else pr
                 txt = (
-                    f"🔵 {sym} {kind_txt} order canceled "
-                    f"(target was {self._fmt_price(sym, price)})."
+                    f"🔵 {sym} {kind_txt} order canceled. "
+                    f"Target was {self._fmt_price(sym, price)}."
                 )
             else:
                 disp_q = self._display_qty(q)
                 txt = (
-                    f"🔵 {sym} {otype} canceled. "
-                    f"(Was {pos_color(side)} {side_name(side)}, Volume: {self._fmt_qty(sym, disp_q)} "
-                    f"at {self._fmt_price(sym, pr)})"
+                    f"🔵 {sym} {otype} order canceled. "
+                    f"Was {pos_color(side)} {side_name(side)}, volume {self._fmt_qty(sym, disp_q)} "
+                    f"at {self._fmt_price(sym, pr)}."
                 )
             tg_a(txt)
             return
@@ -645,11 +645,11 @@ class AlexBot:
                             order_word = "partial take-profit order"
                         pct_txt = f", {pct:.0f}%, Volume {self._fmt_qty(sym, disp_orig_qty)}"
                     txt = (
-                        f"🔵 {sym} {order_word} set at {self._fmt_price(sym, price)}{pct_txt}"
+                        f"🔵 {sym} {order_word} placed at {self._fmt_price(sym, price)}{pct_txt}."
                     )
                 else:
                     txt = (
-                        f"🔵 {sym} stop order set at {self._fmt_price(sym, price)}"
+                        f"🔵 {sym} stop-loss order placed at {self._fmt_price(sym, price)}."
                     )
                 tg_a(txt)
             else:
@@ -665,10 +665,10 @@ class AlexBot:
                     action = ""
 
                 side_txt = f"{side_name(side)}{pos_color(side)}"
-                order_kind = "close " if reduce_flag else ""
+                order_kind = "closing " if reduce_flag else ""
                 txt = (
-                    f"🔵 {sym} {side_txt} New limit {order_kind}order. "
-                    f"Volume: {self._fmt_qty(sym, disp_orig_qty)}{pct_txt} at {self._fmt_price(sym, lmt)}"
+                    f"🔵 {sym} {side_txt} new {order_kind}limit order: "
+                    f"volume {self._fmt_qty(sym, disp_orig_qty)}{pct_txt} at {self._fmt_price(sym, lmt)}."
                 )
                 tg_a(txt)
 
