@@ -321,10 +321,22 @@ class AlexBot:
                 if otype in CHILD_TYPES:
                     # STOP/TAKE
                     kind = "STOP" if "STOP" in otype else "TAKE"
-                    txt = (
-                        f"{child_color()} (restart) Trader: {sym} {side_name(side)} "
-                        f"{kind} set at {self._fmt_price(sym, main_price)}"
-                    )
+                    if kind == "TAKE":
+                        disp_qty = self._display_qty(orig_qty)
+                        base_amt = self.base_sizes.get((sym, side)) or 0.0
+                        pct_txt = ""
+                        if base_amt > 1e-12:
+                            pct = (orig_qty / base_amt) * 100
+                            pct_txt = f", {pct:.0f}%, Volume {self._fmt_qty(sym, disp_qty)}"
+                        txt = (
+                            f"{child_color()} (restart) Trader: {sym} {side_name(side)} "
+                            f"{kind} set at {self._fmt_price(sym, main_price)}{pct_txt}"
+                        )
+                    else:
+                        txt = (
+                            f"{child_color()} (restart) Trader: {sym} {side_name(side)} "
+                            f"{kind} set at {self._fmt_price(sym, main_price)}"
+                        )
                 elif is_limitlike:
                     txt = (
                         f"{pos_color(side)} (restart) Trader: {sym} {side_name(side)} LIMIT, "
@@ -573,9 +585,19 @@ class AlexBot:
                 price = stp if stp > 1e-12 else lmt
                 pg_upsert_order(sym, side, order_id, orig_qty, price, "NEW")
                 kind = "STOP" if "STOP" in otype else "TAKE"
-                txt = (
-                    f"🔵 Trader: {sym} {kind} set at {self._fmt_price(sym, price)}"
-                )
+                if kind == "TAKE":
+                    base_amt = self.base_sizes.get((sym, side)) or 0.0
+                    pct_txt = ""
+                    if base_amt > 1e-12:
+                        pct = (orig_qty / base_amt) * 100
+                        pct_txt = f", {pct:.0f}%, Volume {self._fmt_qty(sym, disp_orig_qty)}"
+                    txt = (
+                        f"🔵 Trader: {sym} {kind} set at {self._fmt_price(sym, price)}{pct_txt}"
+                    )
+                else:
+                    txt = (
+                        f"🔵 Trader: {sym} {kind} set at {self._fmt_price(sym, price)}"
+                    )
                 tg_a(txt)
             else:
                 pg_upsert_order(sym, side, order_id, orig_qty, lmt, "NEW")
@@ -648,8 +670,7 @@ class AlexBot:
                         f"{pos_color(side)} Trader: {sym} position closed {side_name(side)} 100% "
                         f"by {reason.upper()} at {self._fmt_price(sym, fill_price)}, "
                         f"Volume: {self._fmt_qty(sym, display_vol)}, "
-                        f"PNL: {_fmt_float(display_pnl)} usdt, "
-                        f"RR={abs(rr_val):.1f} {color}{status}"
+                        f"PNL: {_fmt_float(display_pnl)} usdt {color}{status}"
                     )
                     tg_a(txt)
 
