@@ -336,7 +336,7 @@ class AlexBot:
                 self.base_sizes[(sym, side)] = vol
 
                 txt = (
-                    f"{pos_color(side)} (restart) Trader: {sym} "
+                    f"{pos_color(side)} (restart) {sym} "
                     f"{side_name(side)} position opened, Volume={self._fmt_qty(sym, vol)}, "
                     f"Price={self._fmt_price(sym, prc)}"
                 )
@@ -390,23 +390,23 @@ class AlexBot:
                             pct = (orig_qty / base_amt) * 100
                             pct_txt = f", {pct:.0f}%, Volume {self._fmt_qty(sym, disp_qty)}"
                         txt = (
-                            f"{child_color()} (restart) Trader: {sym} {side_name(side)} "
+                            f"{child_color()} (restart) {sym} {side_name(side)} "
                             f"{kind} set at {self._fmt_price(sym, main_price)}{pct_txt}"
                         )
                     else:
                         txt = (
-                            f"{child_color()} (restart) Trader: {sym} {side_name(side)} "
+                            f"{child_color()} (restart) {sym} {side_name(side)} "
                             f"{kind} set at {self._fmt_price(sym, main_price)}"
                         )
                 elif is_limitlike:
                     txt = (
-                        f"{pos_color(side)} (restart) Trader: {sym} {side_name(side)} LIMIT, "
+                        f"{pos_color(side)} (restart) {sym} {side_name(side)} LIMIT, "
                         f"Volume: {self._fmt_qty(sym, orig_qty)} at {self._fmt_price(sym, main_price)}"
                     )
                 else:
                     # fallback
                     txt = (
-                        f"{pos_color(side)} (restart) Trader: {sym} {side_name(side)} {otype}, "
+                        f"{pos_color(side)} (restart) {sym} {side_name(side)} {otype}, "
                         f"qty={orig_qty}, price={main_price}"
                     )
 
@@ -600,13 +600,13 @@ class AlexBot:
                 kind_txt = "stop-loss" if "STOP" in otype else "take-profit"
                 price = sp if sp > 1e-12 else pr
                 txt = (
-                    f"🔵 Trader: {sym} {kind_txt} order canceled "
+                    f"🔵 {sym} {kind_txt} order canceled "
                     f"(target was {self._fmt_price(sym, price)})."
                 )
             else:
                 disp_q = self._display_qty(q)
                 txt = (
-                    f"🔵 Trader: {sym} {otype} canceled. "
+                    f"🔵 {sym} {otype} canceled. "
                     f"(Was {pos_color(side)} {side_name(side)}, Volume: {self._fmt_qty(sym, disp_q)} "
                     f"at {self._fmt_price(sym, pr)})"
                 )
@@ -645,11 +645,11 @@ class AlexBot:
                             order_word = "partial take-profit order"
                         pct_txt = f", {pct:.0f}%, Volume {self._fmt_qty(sym, disp_orig_qty)}"
                     txt = (
-                        f"🔵 Trader: {sym} {order_word} set at {self._fmt_price(sym, price)}{pct_txt}"
+                        f"🔵 {sym} {order_word} set at {self._fmt_price(sym, price)}{pct_txt}"
                     )
                 else:
                     txt = (
-                        f"🔵 Trader: {sym} stop order set at {self._fmt_price(sym, price)}"
+                        f"🔵 {sym} stop order set at {self._fmt_price(sym, price)}"
                     )
                 tg_a(txt)
             else:
@@ -667,7 +667,7 @@ class AlexBot:
                 side_txt = f"{side_name(side)}{pos_color(side)}"
                 order_kind = "close " if reduce_flag else ""
                 txt = (
-                    f"🔵 Trader: {sym} {side_txt} New limit {order_kind}order. "
+                    f"🔵 {sym} {side_txt} New limit {order_kind}order. "
                     f"Volume: {self._fmt_qty(sym, disp_orig_qty)}{pct_txt} at {self._fmt_price(sym, lmt)}"
                 )
                 tg_a(txt)
@@ -693,11 +693,11 @@ class AlexBot:
                     if pct < 99.99:
                         order_word = "partial take profit order"
                     txt = (
-                        f"{pos_color(side)} Trader: {sym} {side_name(side)} {order_word} triggered at {self._fmt_price(sym, s_p)}"
+                        f"{pos_color(side)} {sym} {side_name(side)} {order_word} triggered at {self._fmt_price(sym, s_p)}"
                     )
                 else:
                     txt = (
-                        f"{pos_color(side)} Trader: {sym} stop order triggered at {self._fmt_price(sym, s_p)}"
+                        f"{pos_color(side)} {sym} stop order triggered at {self._fmt_price(sym, s_p)}"
                     )
                 tg_a(txt)
 
@@ -734,7 +734,7 @@ class AlexBot:
                     display_pnl = new_rpnl * self.fake_coef if self.use_fake_report else new_rpnl
                     reason_word = "stop order" if reason == "stop" else ("take profit order" if reason == "take" else "market")
                     txt = (
-                        f"{pos_color(side)} Trader: {sym} {side_name(side)} position closed 100% by {reason_word} "
+                        f"{pos_color(side)} {sym} {side_name(side)} position closed 100% by {reason_word} "
                         f"at {self._fmt_price(sym, fill_price)}, Volume: {self._fmt_qty(sym, display_vol)}, "
                         f"PNL: {_fmt_float(display_pnl)} usdt"
                     )
@@ -767,7 +767,7 @@ class AlexBot:
                     disp_closed = self._display_qty(fill_qty)
                     disp_left = self._display_qty(new_amt)
                     txt = (
-                        f"{pos_color(side)} Trader: {sym} {side_name(side)} position decreased "
+                        f"{pos_color(side)} {sym} {side_name(side)} position decreased "
                         f"-{self._fmt_qty(sym, disp_closed)} (-{int(closed_pct)}%) -> "
                         f"{self._fmt_qty(sym, disp_left)} "
                         f"at {self._fmt_price(sym, fill_price)}, "
@@ -790,7 +790,7 @@ class AlexBot:
                     self.base_sizes[(sym, side)] = new_amt
                     display_vol = self._display_qty(new_amt)
                     txt = (
-                        f"{pos_color(side)} Trader: {sym} {side_name(side)} position opened "
+                        f"{pos_color(side)} {sym} {side_name(side)} position opened "
                         f"{reason_text(otype)} 100% "
                         f"at {self._fmt_price(sym, fill_price)}, "
                         f"Volume: {self._fmt_qty(sym, display_vol)}"
@@ -804,7 +804,7 @@ class AlexBot:
                     disp_add = self._display_qty(fill_qty)
                     disp_new = self._display_qty(new_amt)
                     txt = (
-                        f"{pos_color(side)} Trader: {sym} {side_name(side)} position increased "
+                        f"{pos_color(side)} {sym} {side_name(side)} position increased "
                         f"+{self._fmt_qty(sym, disp_add)} ({int(add_pct)}%) -> "
                         f"{self._fmt_qty(sym, disp_new)} "
                         f"at {self._fmt_price(sym, fill_price)}"
@@ -856,7 +856,7 @@ class AlexBot:
             self.mirror_base_sizes.pop((sym, side), None)
             reason_word = "stop order" if reason == "stop" else ("take profit order" if reason == "take" else "market")
             txt = (
-                f"[Mirror]: {pos_color(side)} Trader: {sym} {side_name(side)} position closed 100% by {reason_word} "
+                f"[Mirror]: {pos_color(side)} {sym} {side_name(side)} position closed 100% by {reason_word} "
                 f"({int(ratio)}%, {_fmt_float(old_m_amt)} -> 0.0, position 0%) "
                 f"at {self._fmt_price(sym, fill_price)}, PNL: {_fmt_float(new_m_pnl)}"
             )
@@ -864,7 +864,7 @@ class AlexBot:
         else:
             pg_upsert_position("mirror_positions", sym, side, new_m_amt, old_m_entry, new_m_pnl, "mirror", False)
             txt = (
-                f"[Mirror]: {pos_color(side)} Trader: {sym} {side_name(side)} position decreased "
+                f"[Mirror]: {pos_color(side)} {sym} {side_name(side)} position decreased "
                 f"-{_fmt_float(dec_qty)} (-{int(ratio)}%) -> {_fmt_float(new_m_amt)} "
                 f"at {self._fmt_price(sym, fill_price)}, PNL: {_fmt_float(new_m_pnl)}"
             )
@@ -900,7 +900,7 @@ class AlexBot:
         if old_m_amt < 1e-12:
             self.mirror_base_sizes[(sym, side)] = new_m_amt
             txt = (
-                f"[Mirror]: {pos_color(side)} Trader: {sym} {side_name(side)} position opened "
+                f"[Mirror]: {pos_color(side)} {sym} {side_name(side)} position opened "
                 f"{rtxt} for {self._fmt_qty(sym, inc_qty)} (100%) "
                 f"at {self._fmt_price(sym, fill_price)}"
             )
@@ -910,7 +910,7 @@ class AlexBot:
             if base_m_amt > 1e-12:
                 add_pct = (inc_qty / base_m_amt) * 100
             txt = (
-                f"[Mirror]: {pos_color(side)} Trader: {sym} {side_name(side)} position increased "
+                f"[Mirror]: {pos_color(side)} {sym} {side_name(side)} position increased "
                 f"+{_fmt_float(inc_qty)} ({int(add_pct)}%) -> {_fmt_float(new_m_amt)} "
                 f"{rtxt} at {self._fmt_price(sym, fill_price)}"
             )
@@ -945,7 +945,7 @@ class AlexBot:
                 continue
             kind = "take-profit" if "TAKE_PROFIT" in otype else "stop-loss"
             msg = (
-                f"⚠️ Trader: {symbol} {side_name(side)}. Position size changed "
+                f"⚠️ {symbol} {side_name(side)}. Position size changed "
                 f"from {self._fmt_qty(symbol, self._display_qty(old_amt))} to "
                 f"{self._fmt_qty(symbol, self._display_qty(new_amt))}.\n"
                 f"Existing {kind} (order {od.get('orderId')}) volume "
