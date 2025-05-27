@@ -258,10 +258,12 @@ class AlexBot:
         return len(s.split('.')[1])
 
     def _fmt_qty(self, sym:str, qty:float)->str:
-        # Форматирование количества с учётом точности символа
+        # Форматирование количества с учётом точности символа и добавление названия монеты
         dec = self.lot_size_map.get(sym, 4)
         val = f"{qty:.{dec}f}"
-        return val.rstrip('0').rstrip('.') if '.' in val else val
+        q = val.rstrip('0').rstrip('.') if '.' in val else val
+        coin = sym[:-4] if sym.endswith("USDT") else sym
+        return f"{q} {coin}"
 
     def _display_qty(self, qty: float) -> float:
         """Return quantity scaled for fake report if enabled."""
@@ -749,14 +751,15 @@ class AlexBot:
                     disp_closed = self._display_qty(fill_qty)
                     disp_left = self._display_qty(new_amt)
                     txt = (
-                        f"{pos_color(side)} Trader: {sym} partial {reason.upper()} {side_name(side)} "
-                        f"closed {self._fmt_qty(sym, disp_closed)} ({int(closed_pct)}%) "
+                        f"{pos_color(side)} Trader: {sym} {side_name(side)} position decreased "
+                        f"-{self._fmt_qty(sym, disp_closed)} (-{int(closed_pct)}%) -> "
+                        f"{self._fmt_qty(sym, disp_left)} "
                         f"at {self._fmt_price(sym, fill_price)}, "
-                        f"left {self._fmt_qty(sym, disp_left)} ({int(new_pct)}%), "
                         f"current PNL: {_fmt_float(display_pnl)}"
                     )
                     tg_a(txt)
                     pg_upsert_position("positions", sym, side, new_amt, old_entry, new_rpnl, "binance", False)
+                    self.base_sizes[(sym, side)] = new_amt
 
                 if self.mirror_enabled:
                     tg_m(f"[Main] {txt}")
@@ -782,11 +785,12 @@ class AlexBot:
                     disp_add = self._display_qty(fill_qty)
                     disp_new = self._display_qty(new_amt)
                     txt = (
-                        f"{pos_color(side)} Trader: {sym} position increased {side_name(side)} "
+                        f"{pos_color(side)} Trader: {sym} {side_name(side)} position increased "
                         f"+{self._fmt_qty(sym, disp_add)} ({int(add_pct)}%) -> "
-                        f"{self._fmt_qty(sym, disp_new)} ({int(new_pct)}%) "
+                        f"{self._fmt_qty(sym, disp_new)} "
                         f"at {self._fmt_price(sym, fill_price)}"
                     )
+                    self.base_sizes[(sym, side)] = new_amt
 
                 tg_a(txt)
                 pg_upsert_position("positions", sym, side, new_amt, fill_price, new_rpnl, "binance", False)
@@ -830,15 +834,13 @@ class AlexBot:
             tg_m(txt)
         else:
             pg_upsert_position("mirror_positions", sym, side, new_m_amt, old_m_entry, new_m_pnl, "mirror", False)
-            new_pct = 0
-            if base_m_amt > 1e-12:
-                new_pct = (new_m_amt / base_m_amt) * 100
             txt = (
-                f"[Mirror]: {pos_color(side)} Trader: {sym} partial close {side_name(side)} "
-                f"({int(ratio)}%, {_fmt_float(old_m_amt)} -> {_fmt_float(new_m_amt)}, position {int(new_pct)}%) "
+                f"[Mirror]: {pos_color(side)} Trader: {sym} {side_name(side)} position decreased "
+                f"-{_fmt_float(dec_qty)} (-{int(ratio)}%) -> {_fmt_float(new_m_amt)} "
                 f"at {self._fmt_price(sym, fill_price)}, PNL: {_fmt_float(new_m_pnl)}"
             )
             tg_m(txt)
+            self.mirror_base_sizes[(sym, side)] = new_m_amt
 
     def _mirror_increase(self, sym:str, side:str, fill_qty:float, fill_price:float, rtxt:str):
         old_m_amt, old_m_entry, old_m_rpnl= pg_get_position("mirror_positions", sym, side) or (0.0,0.0,0.0)
@@ -870,16 +872,15 @@ class AlexBot:
             tg_m(txt)
         else:
             add_pct = 0
-            new_pct = 0
             if base_m_amt > 1e-12:
                 add_pct = (inc_qty / base_m_amt) * 100
-                new_pct = (new_m_amt / base_m_amt) * 100
             txt = (
-                f"[Mirror]: {pos_color(side)} Trader: {sym} position increased {side_name(side)} "
-                f"+{_fmt_float(inc_qty)} ({int(add_pct)}%) -> {_fmt_float(new_m_amt)} ({int(new_pct)}%) "
+                f"[Mirror]: {pos_color(side)} Trader: {sym} {side_name(side)} position increased "
+                f"+{_fmt_float(inc_qty)} ({int(add_pct)}%) -> {_fmt_float(new_m_amt)} "
                 f"{rtxt} at {self._fmt_price(sym, fill_price)}"
             )
             tg_m(txt)
+            self.mirror_base_sizes[(sym, side)] = new_m_amt
 
 
     def _maybe_monthly_report(self, send_fn=tg_a, prefix: Optional[str] = None, *, detailed: bool = False, fake: bool = False):
