@@ -555,13 +555,23 @@ class AlexBot:
         if status == "CANCELED":
             pg_delete_order(sym, side, order_id)
             pr= float(o.get("p",0))
+            sp= float(o.get("sp",0))
             q= float(o.get("q",0))
-            disp_q = self._display_qty(q)
-            txt = (
-                f"🔵 Trader: {sym} {otype} canceled. "
-                f"(Was {pos_color(side)} {side_name(side)}, Volume: {self._fmt_qty(sym, disp_q)} "
-                f"at {self._fmt_price(sym, pr)})"
-            )
+
+            if otype in CHILD_TYPES:
+                kind_txt = "stop-loss" if "STOP" in otype else "take-profit"
+                price = sp if sp > 1e-12 else pr
+                txt = (
+                    f"🔵 Trader: {sym} {kind_txt} order canceled "
+                    f"(target was {self._fmt_price(sym, price)})."
+                )
+            else:
+                disp_q = self._display_qty(q)
+                txt = (
+                    f"🔵 Trader: {sym} {otype} canceled. "
+                    f"(Was {pos_color(side)} {side_name(side)}, Volume: {self._fmt_qty(sym, disp_q)} "
+                    f"at {self._fmt_price(sym, pr)})"
+                )
             tg_a(txt)
             return
 
