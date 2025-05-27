@@ -808,8 +808,14 @@ class AlexBot:
                     )
                     self.base_sizes[(sym, side)] = new_amt
 
+                # calculate new average entry price when position size increases
+                if new_amt > 1e-12 and old_amt > 1e-12:
+                    avg_price = (old_entry * old_amt + fill_price * fill_qty) / new_amt
+                else:
+                    avg_price = fill_price
+
                 tg_a(txt)
-                pg_upsert_position("positions", sym, side, new_amt, fill_price, new_rpnl, "binance", False)
+                pg_upsert_position("positions", sym, side, new_amt, avg_price, new_rpnl, "binance", False)
 
                 if self.mirror_enabled:
                     tg_m(f"[Main] {txt}")
@@ -877,7 +883,13 @@ class AlexBot:
             log.error("_mirror_increase: %s", e)
             tg_m(f"[Mirror]: failed to open position {sym} {side_name(side)}: {e}")
             return
-        pg_upsert_position("mirror_positions", sym, side, new_m_amt, fill_price, old_m_rpnl, "mirror", False)
+        # calculate new average entry price for the mirror account
+        if new_m_amt > 1e-12 and old_m_amt > 1e-12:
+            m_avg_price = (old_m_entry * old_m_amt + fill_price * inc_qty) / new_m_amt
+        else:
+            m_avg_price = fill_price
+
+        pg_upsert_position("mirror_positions", sym, side, new_m_amt, m_avg_price, old_m_rpnl, "mirror", False)
 
         if old_m_amt < 1e-12:
             self.mirror_base_sizes[(sym, side)] = new_m_amt
