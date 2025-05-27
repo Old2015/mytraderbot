@@ -94,10 +94,7 @@ def _format_monthly_table(
 
     lines.append(f"\U0001F4CA Monthly Performance — {month_name} {year}")
     lines.append("")
-    lines.append("\u27a1\ufe0f  All trades are listed below in strict")
-    lines.append("chronological order (earliest \u2192 latest).")
-    lines.append("")
-
+    lines.append("\u27a1\ufe0f  All trades are listed below in chronological order (earliest \u2192 latest).")
     lines.append(
         f"{'Instrument':<{col1_w}}  {'Side':<{col2_w}}  {'PnL (USDT)':>{col3_w}}"
     )
