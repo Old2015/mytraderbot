@@ -778,7 +778,7 @@ class AlexBot:
                 )
                 tg_a(txt)
 
-        elif status=="FILLED":
+        elif status in ("FILLED", "PARTIALLY_FILLED"):
             # Удаляем из orders, если это limit-like или child
             if (("LIMIT" in otype.upper()) or (otype in CHILD_TYPES)):
                 pg_delete_order(sym, side, order_id)
