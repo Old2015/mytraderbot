@@ -88,7 +88,7 @@ def _format_monthly_table(
 
     col1_w = 11
     col2_w = 6
-    col3_w = 16
+    col3_w = 18
 
     lines: List[str] = []
 
