@@ -79,7 +79,7 @@ def _fmt_usdt(x: float, sign: bool = False) -> str:
 
 def _format_monthly_table(
     trades,
-    month_name: str,
+    month: int,
     year: int,
     *,
     fake: bool = False,
@@ -91,6 +91,10 @@ def _format_monthly_table(
     col3_w = 13
 
     lines: List[str] = []
+
+    month_name = calendar.month_name[month]
+    month_abbr = calendar.month_abbr[month]
+    days_in_month = calendar.monthrange(year, month)[1]
 
     lines.append(f"\U0001F4CA Monthly Performance — {month_name} {year}")
     lines.append("")
@@ -127,8 +131,38 @@ def _format_monthly_table(
     lines.append(f"{label:<{label_w}}  {_fmt_usdt(total_pnl, sign=True):>{col3_w}}")
     lines.append("")
     lines.append(f"Win rate: {win_rate:.0f} %")
-    lines.append(f"Winners: {win_cnt}")
-    lines.append(f"Losers: {loss_cnt}")
+    lines.append(f"Winners: {win_cnt} Losers: {loss_cnt}")
+
+    lines.append("")
+    lines.append("-" * (col1_w + col2_w + col3_w + 4))
+
+    start_equity = FAKE_DEPOSIT if fake else REAL_DEPOSIT
+    end_equity = start_equity + total_pnl
+    month_ret = (total_pnl / start_equity) * 100 if start_equity else 0
+    apr = month_ret * 12
+
+    lines.append(
+        f"Starting equity (1 {month_abbr})    :   ${_fmt_usdt(start_equity)}"
+    )
+    lines.append(
+        f"Net P&L for the month    :    {('+' if total_pnl>=0 else '-')}${_fmt_usdt(abs(total_pnl))}"
+    )
+    lines.append(
+        f"Ending equity ({days_in_month} {month_abbr})   :   ${_fmt_usdt(end_equity)}"
+    )
+
+    lines.append("")
+    lines.append(
+        f"Monthly return                  :     **{month_ret:.2f} %**"
+    )
+    lines.append(
+        f"Annualised return (APR*) :     **{apr:.2f} %**"
+    )
+
+    lines.append(
+        "*APR is calculated and is presented for illustrative purposes only; future returns may differ."
+    )
+    lines.append("-" * (col1_w + col2_w + col3_w + 4))
 
     return lines
 
@@ -541,10 +575,9 @@ class AlexBot:
             send_fn(f"No data for {month:02d}.{year}")
             return
 
-        month_name = calendar.month_name[month]
         lines = [header]
         lines.extend(
-            _format_monthly_table(trades, month_name, year, fake=fake)
+            _format_monthly_table(trades, month, year, fake=fake)
         )
 
         send_fn("\n".join(lines))
@@ -1002,9 +1035,8 @@ class AlexBot:
             return
 
         # default output for main channel
-        month_name = calendar.month_name[month]
         lines.extend(
-            _format_monthly_table(trades, month_name, year, fake=fake)
+            _format_monthly_table(trades, month, year, fake=fake)
         )
 
         send_fn("\n".join(lines))
