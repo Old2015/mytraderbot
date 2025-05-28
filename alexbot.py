@@ -371,7 +371,7 @@ class AlexBot:
                 txt = (
                     f"{pos_color(side)} (restart) {sym} "
                     f"{side_name(side)} position opened, Volume={self._fmt_qty(sym, vol)}, "
-                    f"Price={self._fmt_price(sym, prc)}"
+                    f"Price entry={self._fmt_price(sym, prc)}"
                 )
                 tg_m(txt)
                 pg_upsert_position("positions", sym, side, vol, prc, 0.0, "binance", False)
@@ -415,21 +415,28 @@ class AlexBot:
                 if otype in CHILD_TYPES:
                     # STOP/TAKE
                     kind = "STOP" if "STOP" in otype else "TAKE"
+                    base_amt = self.base_sizes.get((sym, side)) or 0.0
+                    qty_for_calc = orig_qty
+                    if closepos and orig_qty < 1e-12:
+                        qty_for_calc = base_amt
+                    disp_qty = self._display_qty(qty_for_calc)
+
                     if kind == "TAKE":
-                        disp_qty = self._display_qty(orig_qty)
-                        base_amt = self.base_sizes.get((sym, side)) or 0.0
                         pct_txt = ""
-                        if base_amt > 1e-12:
-                            pct = (orig_qty / base_amt) * 100
+                        if base_amt > 1e-12 and qty_for_calc > 0:
+                            pct = (qty_for_calc / base_amt) * 100
                             pct_txt = f", {pct:.0f}%, Volume {self._fmt_qty(sym, disp_qty)}"
+                        elif qty_for_calc > 0:
+                            pct_txt = f", Volume {self._fmt_qty(sym, disp_qty)}"
                         txt = (
                             f"{child_color()} (restart) {sym} {side_name(side)} "
                             f"{kind} set at {self._fmt_price(sym, main_price)}{pct_txt}"
                         )
                     else:
+                        vol_txt = f", Volume {self._fmt_qty(sym, disp_qty)}" if qty_for_calc > 0 else ""
                         txt = (
                             f"{child_color()} (restart) {sym} {side_name(side)} "
-                            f"{kind} set at {self._fmt_price(sym, main_price)}"
+                            f"{kind} set at {self._fmt_price(sym, main_price)}{vol_txt}"
                         )
                 elif is_limitlike:
                     txt = (
