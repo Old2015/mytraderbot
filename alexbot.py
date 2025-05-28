@@ -624,17 +624,34 @@ class AlexBot:
 
         if status == "CANCELED":
             pg_delete_order(sym, side, order_id)
-            pr= float(o.get("p",0))
-            sp= float(o.get("sp",0))
-            q= float(o.get("q",0))
+            pr = float(o.get("p", 0))
+            sp = float(o.get("sp", 0))
+            q = float(o.get("q", 0))
 
             if otype in CHILD_TYPES:
-                kind_txt = "stop-loss" if "STOP" in otype else "take-profit"
                 price = sp if sp > 1e-12 else pr
-                txt = (
-                    f"🔵 {sym} {kind_txt} order canceled. "
-                    f"Target was {self._fmt_price(sym, price)}."
-                )
+                if "TAKE" in otype:
+                    base_amt = (pg_get_position("positions", sym, side) or (0.0,))[0]
+                    if base_amt < 1e-12:
+                        base_amt = self.base_sizes.get((sym, side)) or 0.0
+                    pct_txt = ""
+                    vol_txt = ""
+                    order_word = "take-profit order"
+                    if base_amt > 1e-12 and q > 0:
+                        pct = (q / base_amt) * 100
+                        if pct < 99.99:
+                            order_word = "partial take-profit order"
+                        pct_txt = f", {pct:.0f}%"
+                        vol_txt = f", Volume {self._fmt_qty(sym, self._display_qty(q))}"
+                    txt = (
+                        f"🔵 {sym} {order_word} canceled. "
+                        f"Target was {self._fmt_price(sym, price)}{pct_txt}{vol_txt}."
+                    )
+                else:
+                    txt = (
+                        f"🔵 {sym} stop-loss order canceled. "
+                        f"Target was {self._fmt_price(sym, price)}."
+                    )
             else:
                 disp_q = self._display_qty(q)
                 txt = (
@@ -694,15 +711,27 @@ class AlexBot:
                 tg_a(txt)
             else:
                 pg_upsert_order(sym, side, order_id, orig_qty, lmt, "NEW")
+                if reduce_flag:
+                    base_amt = self.base_sizes.get((sym, side)) or 0.0
+                    if base_amt > 1e-12:
+                        pct = (orig_qty / base_amt) * 100
+                        order_word = "take-profit order"
+                        if pct < 99.99:
+                            order_word = "partial take-profit order"
+                        pct_txt = f", {pct:.0f}%, Volume {self._fmt_qty(sym, disp_orig_qty)}"
+                        txt = (
+                            f"🔵 {sym} {order_word} placed at {self._fmt_price(sym, lmt)}{pct_txt}."
+                        )
+                        tg_a(txt)
+                        return
+
                 pct_txt = ""
                 if reduce_flag:
                     base_amt = self.base_sizes.get((sym, side)) or 0.0
                     if base_amt > 1e-12:
                         pct = (orig_qty / base_amt) * 100
                         pct_txt = f" ({pct:.0f}%)"
-                    action = "close"
-                else:
-                    action = ""
+                action = "close" if reduce_flag else ""
 
                 side_txt = f"{side_name(side)}{pos_color(side)}"
                 order_kind = "closing " if reduce_flag else ""
