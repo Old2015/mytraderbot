@@ -88,7 +88,7 @@ def _format_monthly_table(
 
     col1_w = 11
     col2_w = 6
-    col3_w = 14
+    col3_w = 16
 
     lines: List[str] = []
 
@@ -141,7 +141,7 @@ def _format_monthly_table(
     month_ret = (total_pnl / start_equity) * 100 if start_equity else 0
     apr = month_ret * 12
 
-    sep = "─" * 15  # heavy horizontal line
+    sep = "─" * 16  # heavy horizontal line
     indent = "       "  # 7 spaces
 
     lines.append(sep)
