@@ -141,28 +141,30 @@ def _format_monthly_table(
     month_ret = (total_pnl / start_equity) * 100 if start_equity else 0
     apr = month_ret * 12
 
+    sep = "─" * 13  # heavy horizontal line
+    indent = "       "  # 7 spaces
+
+    lines.append(sep)
+    lines.append("\U0001F4C8 Performance Summary ")
+    lines.append(sep)
+    lines.append(f"Starting equity (1 {month_name})")
+    lines.append(f"{indent}${_fmt_usdt(start_equity)}")
+    lines.append("Net P&L for the month ")
     lines.append(
-        f"Starting equity (1 {month_abbr})    :   ${_fmt_usdt(start_equity)}"
+        f"{indent}{('+' if total_pnl>=0 else '-')}${_fmt_usdt(abs(total_pnl))}"
     )
-    lines.append(
-        f"Net P&L for the month    :    {('+' if total_pnl>=0 else '-')}${_fmt_usdt(abs(total_pnl))}"
-    )
-    lines.append(
-        f"Ending equity ({days_in_month} {month_abbr})   :   ${_fmt_usdt(end_equity)}"
-    )
+    lines.append(f"Ending equity ({days_in_month} {month_name})")
+    lines.append(f"{indent}${_fmt_usdt(end_equity)}")
 
     lines.append("")
-    lines.append(
-        f"Monthly return                  :     **{month_ret:.2f} %**"
-    )
-    lines.append(
-        f"Annualised return (APR*) :     **{apr:.2f} %**"
-    )
+    lines.append(f"Monthly return **{month_ret:.2f} %**")
+    lines.append(f"Annualised return (APR*) **{apr:.2f} %**")
 
-    lines.append(
-        "*APR is calculated and is presented for illustrative purposes only; future returns may differ."
-    )
-    lines.append("-" * (col1_w + col2_w + col3_w + 4))
+    lines.append("")
+    lines.append("*APR is calculated and is presented")
+    lines.append("for illustrative purposes only; future")
+    lines.append("returns may differ.")
+    lines.append(sep)
 
     return lines
 
