@@ -937,16 +937,27 @@ class AlexBot:
                 self._warn_protective_orders(sym, side, old_amt, new_amt)
 
     def _mirror_reduce(self, sym: str, side: str, fill_qty: float, fill_price: float, partial_pnl: float, reason: str):
-        old_m_amt, old_m_entry, old_m_rpnl= pg_get_position("mirror_positions", sym, side) or (0.0,0.0,0.0)
-        dec_qty= fill_qty*MIRROR_COEFFICIENT
-        new_m_pnl= old_m_rpnl + partial_pnl*MIRROR_COEFFICIENT
-        new_m_amt= old_m_amt- dec_qty
-        base_m_amt = self.mirror_base_sizes.get((sym, side), old_m_amt if old_m_amt>1e-12 else dec_qty)
+        old_m_amt, old_m_entry, old_m_rpnl = (
+            pg_get_position("mirror_positions", sym, side) or (0.0, 0.0, 0.0)
+        )
+        dec_qty = fill_qty * MIRROR_COEFFICIENT
+        new_m_pnl = old_m_rpnl + partial_pnl * MIRROR_COEFFICIENT
 
-        ratio=100
-        if old_m_amt>1e-12:
-            ratio= (dec_qty/old_m_amt)*100
-        if ratio>100: ratio=100
+        # if database doesn't contain position amount (e.g. after restart),
+        # fall back to stored base size so that notifications show correct volume
+        if old_m_amt <= 1e-12:
+            old_m_amt = self.mirror_base_sizes.get((sym, side), dec_qty)
+
+        new_m_amt = old_m_amt - dec_qty
+        base_m_amt = self.mirror_base_sizes.get(
+            (sym, side), old_m_amt if old_m_amt > 1e-12 else dec_qty
+        )
+
+        ratio = 100
+        if old_m_amt > 1e-12:
+            ratio = (dec_qty / old_m_amt) * 100
+        if ratio > 100:
+            ratio = 100
         side_binance= "BUY" if side=="SHORT" else "SELL"
         try:
             self.client_b.futures_create_order(
