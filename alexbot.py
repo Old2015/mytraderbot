@@ -598,7 +598,8 @@ class AlexBot:
         otype   = o["ot"]   # e.g. "LIMIT","MARKET"
         status  = o["X"]    # "NEW","CANCELED","FILLED"
         fill_price = float(o.get("ap", 0))  # цена исполнения
-        fill_qty = float(o.get("l", 0))     # исполненный объём
+        fill_qty = float(o.get("l", 0))     # исполненный объём (часть)
+        accum_qty = float(o.get("z", fill_qty))  # суммарно исполненный объём
         reduce_flag = bool(o.get("R", False))
         partial_pnl = float(o.get("rp", 0.0))  # PnL части ордера
         order_id = int(o.get("i", 0))
@@ -882,9 +883,10 @@ class AlexBot:
                 # warn about outdated protective orders
                 self._warn_protective_orders(sym, side, old_amt, new_amt)
             else:
-                new_amt = old_amt + fill_qty
-
                 if old_amt < 1e-12:
+                    qty = accum_qty if status == "FILLED" else fill_qty
+                    new_amt = qty
+                    mirror_amt = qty
                     self.base_sizes[(sym, side)] = new_amt
                     display_vol = self._display_qty(new_amt)
                     txt = (
@@ -894,6 +896,8 @@ class AlexBot:
                         f"Volume: {self._fmt_qty(sym, display_vol)}"
                     )
                 else:
+                    new_amt = old_amt + fill_qty
+                    mirror_amt = fill_qty
                     add_pct = 0
                     new_pct = 0
                     if base_amt > 1e-12:
@@ -920,7 +924,7 @@ class AlexBot:
 
                 if self.mirror_enabled:
                     tg_m(f"[Main] {txt}")
-                    self._mirror_increase(sym, side, fill_qty, fill_price, reason_text(otype))
+                    self._mirror_increase(sym, side, mirror_amt, fill_price, reason_text(otype))
 
                 # warn about outdated protective orders
                 self._warn_protective_orders(sym, side, old_amt, new_amt)
