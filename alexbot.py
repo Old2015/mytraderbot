@@ -648,10 +648,21 @@ class AlexBot:
         elif status == "NEW":
             # значит это реально существующий (найден в openOrders)
             from db import pg_upsert_order
-            orig_qty= float(o.get("q",0))
+            orig_qty = float(o.get("q", 0))
+            close_pos = bool(o.get("cp", False))
+            stp = float(o.get("sp", 0))
+            lmt = float(o.get("p", 0))
+
+            # определяем базовый объём позиции
+            pos = pg_get_position("positions", sym, side)
+            curr_amt = pos[0] if pos else 0.0
+            base_amt = curr_amt if curr_amt > 1e-12 else self.base_sizes.get((sym, side)) or 0.0
+
+            if close_pos and orig_qty < 1e-12:
+                # для closePosition количество в событии нулевое
+                orig_qty = base_amt
+
             disp_orig_qty = self._display_qty(orig_qty)
-            stp= float(o.get("sp",0))
-            lmt= float(o.get("p",0))
 
             # is limit-like?
             is_limitlike= ("LIMIT" in otype.upper())
@@ -668,9 +679,6 @@ class AlexBot:
                 if kind == "TAKE":
                     pct_txt = ""
                     order_word = "take-profit order"
-                    pos = pg_get_position("positions", sym, side)
-                    curr_amt = pos[0] if pos else 0.0
-                    base_amt = curr_amt if curr_amt > 1e-12 else self.base_sizes.get((sym, side)) or 0.0
                     if base_amt > 1e-12:
                         pct = (orig_qty / base_amt) * 100
                         if pct < 99.99:
