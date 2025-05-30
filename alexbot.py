@@ -699,6 +699,34 @@ class AlexBot:
             tg_a(txt)
             return
 
+        elif status == "EXPIRED":
+            pg_delete_order(sym, side, order_id)
+            pr = float(o.get("p", 0))
+            sp = float(o.get("sp", 0))
+            q = float(o.get("q", 0))
+
+            if otype in CHILD_TYPES:
+                price = sp if sp > 1e-12 else pr
+                if "TAKE" in otype:
+                    txt = (
+                        f"🔵 {sym} take-profit order expired. "
+                        f"Target was {self._fmt_price(sym, price)}."
+                    )
+                else:
+                    txt = (
+                        f"🔵 {sym} stop-loss order expired. "
+                        f"Target was {self._fmt_price(sym, price)}."
+                    )
+            else:
+                disp_q = self._display_qty(q)
+                txt = (
+                    f"🔵 {sym} {otype} order expired. "
+                    f"Was {pos_color(side)} {side_name(side)}, volume {self._fmt_qty(sym, disp_q)} "
+                    f"at {self._fmt_price(sym, pr)}."
+                )
+            tg_a(txt)
+            return
+
         elif status == "NEW":
             # значит это реально существующий (найден в openOrders)
             from db import pg_upsert_order
