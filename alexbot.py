@@ -924,9 +924,17 @@ class AlexBot:
                     mirror_amt = qty
                     self.base_sizes[(sym, side)] = new_amt
                     display_vol = self._display_qty(new_amt)
+
+                    order_qty = float(o.get("q", new_amt))
+                    ratio = 100
+                    if order_qty > 1e-12:
+                        ratio = (new_amt / order_qty) * 100
+                        if ratio > 100:
+                            ratio = 100
+
                     txt = (
                         f"{pos_color(side)} {sym} {side_name(side)} position opened "
-                        f"{reason_text(otype)} 100% "
+                        f"{reason_text(otype)} {int(ratio)}% "
                         f"at {self._fmt_price(sym, fill_price)}, "
                         f"Volume: {self._fmt_qty(sym, display_vol)}"
                     )
