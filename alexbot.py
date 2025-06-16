@@ -220,6 +220,8 @@ class AlexBot:
         # Храним исходные размеры позиций для вычисления процентов
         self.base_sizes = {}
         self.mirror_base_sizes = {}
+        # initial position sizes to calculate RR and volume on final close
+        self.initial_sizes = {}
         self._init_symbol_precisions()
 
         # Запуск WebSocket
@@ -863,8 +865,9 @@ class AlexBot:
 
                 if new_amt <= 1e-8:
 
-                    rr_val = self._calc_rr(side, old_amt, new_rpnl, old_entry, stop_p, take_p)
-                    display_vol = old_amt * self.fake_coef if self.use_fake_report else old_amt
+                    orig_amt = self.initial_sizes.get((sym, side), old_amt)
+                    rr_val = self._calc_rr(side, orig_amt, new_rpnl, old_entry, stop_p, take_p)
+                    display_vol = orig_amt * self.fake_coef if self.use_fake_report else orig_amt
                     display_pnl = new_rpnl * self.fake_coef if self.use_fake_report else new_rpnl
                     reason_word = "stop order" if reason == "stop" else ("take profit order" if reason == "take" else "market")
                     txt = (
@@ -877,9 +880,9 @@ class AlexBot:
                     pg_insert_closed_trade(
                         sym,
                         side,
-                        old_amt,
+                        orig_amt,
                         new_rpnl,
-                        fake_volume=old_amt * self.fake_coef,
+                        fake_volume=orig_amt * self.fake_coef,
                         fake_pnl=new_rpnl * self.fake_coef,
                         entry_price=old_entry,
                         exit_price=fill_price,
@@ -890,6 +893,7 @@ class AlexBot:
                     )
                     pg_delete_position("positions", sym, side)
                     self.base_sizes.pop((sym, side), None)
+                    self.initial_sizes.pop((sym, side), None)
                 else:
                     new_pct = 0
                     if base_amt > 1e-12:
@@ -923,6 +927,7 @@ class AlexBot:
                     new_amt = qty
                     mirror_amt = qty
                     self.base_sizes[(sym, side)] = new_amt
+                    self.initial_sizes[(sym, side)] = new_amt
                     display_vol = self._display_qty(new_amt)
 
                     order_qty = float(o.get("q", new_amt))
@@ -955,6 +960,7 @@ class AlexBot:
                         f"at {self._fmt_price(sym, fill_price)}"
                     )
                     self.base_sizes[(sym, side)] = new_amt
+                    self.initial_sizes[(sym, side)] = self.initial_sizes.get((sym, side), old_amt) + fill_qty
 
                 # calculate new average entry price when position size increases
                 if new_amt > 1e-12 and old_amt > 1e-12:
