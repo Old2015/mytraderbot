@@ -930,32 +930,19 @@ class AlexBot:
                     self.initial_sizes[(sym, side)] = new_amt
                     display_vol = self._display_qty(new_amt)
 
-                    order_qty = float(o.get("q", new_amt))
-                    ratio = 100
-                    if order_qty > 1e-12:
-                        ratio = (new_amt / order_qty) * 100
-                        if ratio > 100:
-                            ratio = 100
-
                     txt = (
                         f"{pos_color(side)} {sym} {side_name(side)} position opened "
-                        f"{reason_text(otype)} {int(ratio)}% "
-                        f"at {self._fmt_price(sym, fill_price)}, "
-                        f"Volume: {self._fmt_qty(sym, display_vol)}"
+                        f"{reason_text(otype)} {self._fmt_qty(sym, display_vol)} "
+                        f"at {self._fmt_price(sym, fill_price)}"
                     )
                 else:
                     new_amt = old_amt + fill_qty
                     mirror_amt = fill_qty
-                    add_pct = 0
-                    new_pct = 0
-                    if base_amt > 1e-12:
-                        add_pct = (fill_qty / base_amt) * 100
-                        new_pct = (new_amt / base_amt) * 100
                     disp_add = self._display_qty(fill_qty)
                     disp_new = self._display_qty(new_amt)
                     txt = (
                         f"{pos_color(side)} {sym} {side_name(side)} position increased "
-                        f"+{self._fmt_qty(sym, disp_add)} ({int(add_pct)}%) -> "
+                        f"+{self._fmt_qty(sym, disp_add)} -> "
                         f"{self._fmt_qty(sym, disp_new)} "
                         f"at {self._fmt_price(sym, fill_price)}"
                     )
