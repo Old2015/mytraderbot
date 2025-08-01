@@ -947,7 +947,10 @@ class AlexBot:
                         f"at {self._fmt_price(sym, fill_price)}"
                     )
                     self.base_sizes[(sym, side)] = new_amt
-                    self.initial_sizes[(sym, side)] = self.initial_sizes.get((sym, side), old_amt) + fill_qty
+                    prev_initial = self.initial_sizes.get((sym, side), old_amt)
+                    # update the initial size to reflect the maximum open
+                    # volume observed for this position
+                    self.initial_sizes[(sym, side)] = max(prev_initial, new_amt)
 
                 # calculate new average entry price when position size increases
                 if new_amt > 1e-12 and old_amt > 1e-12:
