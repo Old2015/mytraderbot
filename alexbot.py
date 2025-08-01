@@ -873,11 +873,10 @@ class AlexBot:
 
                 if new_amt <= 1e-8:
 
-                    total_closed = self.closed_sizes.get((sym, side), fill_qty)
-                    orig_amt = self.initial_sizes.get((sym, side), old_amt)
-                    rr_val = self._calc_rr(side, total_closed, new_rpnl, old_entry, stop_p, take_p)
+                    closing_vol = old_amt
+                    rr_val = self._calc_rr(side, closing_vol, new_rpnl, old_entry, stop_p, take_p)
                     display_vol = (
-                        total_closed * self.fake_coef if self.use_fake_report else total_closed
+                        closing_vol * self.fake_coef if self.use_fake_report else closing_vol
                     )
                     display_pnl = (
                         new_rpnl * self.fake_coef if self.use_fake_report else new_rpnl
@@ -893,9 +892,9 @@ class AlexBot:
                     pg_insert_closed_trade(
                         sym,
                         side,
-                        total_closed,
+                        closing_vol,
                         new_rpnl,
-                        fake_volume=total_closed * self.fake_coef,
+                        fake_volume=closing_vol * self.fake_coef,
                         fake_pnl=new_rpnl * self.fake_coef,
                         entry_price=old_entry,
                         exit_price=fill_price,
