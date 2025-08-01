@@ -220,7 +220,9 @@ class AlexBot:
         # Храним исходные размеры позиций для вычисления процентов
         self.base_sizes = {}
         self.mirror_base_sizes = {}
-        # initial position sizes to calculate RR and volume on final close
+        # Cumulative closed volume per position
+        self.closed_sizes = {}
+        # Initial position sizes to calculate RR and volume on final close
         self.initial_sizes = {}
         self._init_symbol_precisions()
 
@@ -369,6 +371,8 @@ class AlexBot:
                 vol= abs(amt)
                 real_positions.add((sym, side))
                 self.base_sizes[(sym, side)] = vol
+                self.initial_sizes[(sym, side)] = vol
+                self.closed_sizes[(sym, side)] = 0.0
 
                 txt = (
                     f"{pos_color(side)} (restart) {sym} "
@@ -843,6 +847,10 @@ class AlexBot:
             base_amt = self.base_sizes.get((sym, side), old_amt if old_amt>1e-12 else fill_qty)
 
             if reduce_flag:
+                # accumulate closed volume for this position
+                self.closed_sizes[(sym, side)] = (
+                    self.closed_sizes.get((sym, side), 0.0) + fill_qty
+                )
                 new_amt = old_amt - fill_qty
                 ratio = 100
                 if old_amt > 1e-12:
@@ -865,10 +873,15 @@ class AlexBot:
 
                 if new_amt <= 1e-8:
 
+                    total_closed = self.closed_sizes.get((sym, side), fill_qty)
                     orig_amt = self.initial_sizes.get((sym, side), old_amt)
-                    rr_val = self._calc_rr(side, orig_amt, new_rpnl, old_entry, stop_p, take_p)
-                    display_vol = orig_amt * self.fake_coef if self.use_fake_report else orig_amt
-                    display_pnl = new_rpnl * self.fake_coef if self.use_fake_report else new_rpnl
+                    rr_val = self._calc_rr(side, total_closed, new_rpnl, old_entry, stop_p, take_p)
+                    display_vol = (
+                        total_closed * self.fake_coef if self.use_fake_report else total_closed
+                    )
+                    display_pnl = (
+                        new_rpnl * self.fake_coef if self.use_fake_report else new_rpnl
+                    )
                     reason_word = "stop order" if reason == "stop" else ("take profit order" if reason == "take" else "market")
                     txt = (
                         f"{pos_color(side)} {sym} {side_name(side)} position closed 100% by {reason_word} "
@@ -880,9 +893,9 @@ class AlexBot:
                     pg_insert_closed_trade(
                         sym,
                         side,
-                        orig_amt,
+                        total_closed,
                         new_rpnl,
-                        fake_volume=orig_amt * self.fake_coef,
+                        fake_volume=total_closed * self.fake_coef,
                         fake_pnl=new_rpnl * self.fake_coef,
                         entry_price=old_entry,
                         exit_price=fill_price,
@@ -894,6 +907,7 @@ class AlexBot:
                     pg_delete_position("positions", sym, side)
                     self.base_sizes.pop((sym, side), None)
                     self.initial_sizes.pop((sym, side), None)
+                    self.closed_sizes.pop((sym, side), None)
                 else:
                     new_pct = 0
                     if base_amt > 1e-12:
@@ -928,6 +942,7 @@ class AlexBot:
                     mirror_amt = qty
                     self.base_sizes[(sym, side)] = new_amt
                     self.initial_sizes[(sym, side)] = new_amt
+                    self.closed_sizes[(sym, side)] = 0.0
                     display_vol = self._display_qty(new_amt)
 
                     txt = (
